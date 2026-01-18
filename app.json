@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "FriendTime",
+    "slug": "friend-time-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#6366f1"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourname.friendtime",
+      "infoPlist": {
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "FriendTime utilise votre localisation pour calculer le temps passé avec vos amis, même quand l'app est fermée.",
+        "NSLocationWhenInUseUsageDescription": "FriendTime utilise votre localisation pour détecter quand vous êtes avec vos amis.",
+        "NSLocationAlwaysUsageDescription": "FriendTime a besoin d'accéder à votre localisation en arrière-plan pour calculer automatiquement le temps passé avec vos amis.",
+        "UIBackgroundModes": ["location", "fetch"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#6366f1"
+      },
+      "package": "com.yourname.friendtime",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "FriendTime utilise votre localisation pour calculer le temps passé avec vos amis.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ]
+  }
+}
