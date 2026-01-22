@@ -1,12 +1,15 @@
 {
   "name": "friend-time-app",
   "version": "1.0.0",
+  "type": "module",
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -28,7 +31,10 @@
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@types/react": "~19.1.0",
-    "typescript": "^5.3.0"
+    "@vitest/ui": "^4.0.17",
+    "jsdom": "^27.4.0",
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.17"
   },
   "private": true
 }
