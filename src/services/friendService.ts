@@ -262,6 +262,35 @@ export const getMonthlyStats = async (
 };
 
 /**
+ * Récupère les sessions actives en cours
+ */
+export const getActiveSessions = async (userId: string) => {
+  const { data: sessions, error } = await supabase
+    .from('time_sessions')
+    .select(`
+      id,
+      friend_id,
+      started_at,
+      duration_seconds,
+      friend:profiles!time_sessions_friend_id_fkey (
+        id,
+        username,
+        avatar_url
+      )
+    `)
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('started_at', { ascending: false });
+
+  if (error) {
+    console.error('Erreur récupération sessions actives:', error);
+    return [];
+  }
+
+  return sessions || [];
+};
+
+/**
  * Récupère les statistiques globales pour une période
  */
 export const getStatsForPeriod = async (

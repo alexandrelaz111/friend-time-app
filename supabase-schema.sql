@@ -259,6 +259,29 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Fonction pour calculer la durée automatiquement (même pour sessions actives)
+CREATE OR REPLACE FUNCTION calculate_session_duration()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Calcule la durée en secondes
+  IF NEW.ended_at IS NOT NULL THEN
+    -- Session terminée : durée = ended_at - started_at
+    NEW.duration_seconds := EXTRACT(EPOCH FROM (NEW.ended_at - NEW.started_at))::INTEGER;
+  ELSIF NEW.is_active = TRUE THEN
+    -- Session active : durée = maintenant - started_at
+    NEW.duration_seconds := EXTRACT(EPOCH FROM (NOW() - NEW.started_at))::INTEGER;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger pour calculer la durée automatiquement à chaque INSERT/UPDATE
+DROP TRIGGER IF EXISTS calculate_duration_trigger ON time_sessions;
+CREATE TRIGGER calculate_duration_trigger
+  BEFORE INSERT OR UPDATE ON time_sessions
+  FOR EACH ROW EXECUTE FUNCTION calculate_session_duration();
+
 -- Fonction pour mettre à jour les statistiques mensuelles
 CREATE OR REPLACE FUNCTION update_monthly_stats()
 RETURNS TRIGGER AS $$

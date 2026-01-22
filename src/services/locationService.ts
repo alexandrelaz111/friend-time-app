@@ -137,6 +137,13 @@ export const startLocationTracking = async (): Promise<boolean> => {
   try {
     console.log('🚀 Tentative de démarrage du tracking...');
 
+    // Sur Android dans Expo Go, utiliser directement le foreground tracking
+    if (Platform.OS === 'android') {
+      console.log('📱 Android détecté - utilisation du foreground tracking dans Expo Go');
+      await startForegroundTracking();
+      return true;
+    }
+
     // Vérifie si le tracking est déjà actif
     const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
     console.log('📍 Tracking déjà actif ?', isTracking);
@@ -304,10 +311,16 @@ export const checkProximityWithFriends = async (
   latitude: number,
   longitude: number
 ): Promise<void> => {
-  if (!currentUserId) return;
+  console.log(`🔍 Vérification proximité pour user ${currentUserId} à position (${latitude}, ${longitude})`);
+  
+  if (!currentUserId) {
+    console.log('⚠️ Pas de currentUserId - vérification proximité annulée');
+    return;
+  }
 
   try {
     // Appelle la fonction Supabase pour trouver les amis proches
+    console.log(`📡 Appel RPC get_nearby_friends avec seuil: ${DEFAULT_LOCATION_CONFIG.proximityThreshold}m`);
     const { data: nearbyFriends, error } = await supabase.rpc('get_nearby_friends', {
       p_user_id: currentUserId,
       p_latitude: latitude,
@@ -316,9 +329,11 @@ export const checkProximityWithFriends = async (
     });
 
     if (error) {
-      console.error('Erreur vérification proximité:', error);
+      console.error('❌ Erreur vérification proximité:', error);
       return;
     }
+
+    console.log(`📊 Amis proches trouvés: ${nearbyFriends?.length || 0}`, nearbyFriends);
 
     // Récupère les sessions actives de l'utilisateur
     const { data: activeSessions } = await supabase
@@ -326,6 +341,8 @@ export const checkProximityWithFriends = async (
       .select('*')
       .eq('user_id', currentUserId)
       .eq('is_active', true);
+
+    console.log(`📝 Sessions actives: ${activeSessions?.length || 0}`, activeSessions);
 
     const activeSessionFriendIds = new Set(
       (activeSessions || []).map(s => s.friend_id)
@@ -338,7 +355,7 @@ export const checkProximityWithFriends = async (
     for (const friend of nearbyFriends || []) {
       if (!activeSessionFriendIds.has(friend.friend_id)) {
         await startTimeSession(friend.friend_id);
-        console.log(`Session démarrée avec ${friend.username}`);
+        console.log(`🎉 ✅ NOUVELLE SESSION DÉMARRÉE avec ${friend.username} (ID: ${friend.friend_id}) - Distance: ${Math.round(friend.distance)}m`);
       }
     }
 
@@ -346,7 +363,7 @@ export const checkProximityWithFriends = async (
     for (const session of activeSessions || []) {
       if (!nearbyFriendIds.has(session.friend_id)) {
         await endTimeSession(session.id);
-        console.log(`Session terminée avec ami ${session.friend_id}`);
+        console.log(`🛑 Session terminée avec ami ${session.friend_id} (trop éloigné)`);
       }
     }
   } catch (error) {
@@ -360,17 +377,21 @@ export const checkProximityWithFriends = async (
 export const startTimeSession = async (friendId: string): Promise<void> => {
   if (!currentUserId) return;
 
+  const startedAt = new Date().toISOString();
+  
   const { error } = await supabase
     .from('time_sessions')
     .insert({
       user_id: currentUserId,
       friend_id: friendId,
-      started_at: new Date().toISOString(),
+      started_at: startedAt,
       is_active: true,
     });
 
   if (error) {
-    console.error('Erreur démarrage session:', error);
+    console.error('❌ Erreur démarrage session:', error);
+  } else {
+    console.log(`✅ Session enregistrée en DB - User: ${currentUserId}, Friend: ${friendId}, Started: ${startedAt}`);
   }
 };
 

@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { getFriendTimeStats, getStatsForPeriod } from '../services/friendService';
+import { getFriendTimeStats, getStatsForPeriod, getActiveSessions } from '../services/friendService';
 import { FriendTimeStats } from '../types';
 import { normalizeFont } from '../utils/helpers';
 import { useTheme } from '../theme/colors';
@@ -19,6 +19,8 @@ export const HomeScreen: React.FC = () => {
   const { user, isLocationEnabled, enableLocation } = useAuth();
   const { colors } = useTheme();
   const [stats, setStats] = useState<FriendTimeStats[]>([]);
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [monthlyTotal, setMonthlyTotal] = useState({ hours: 0, friends: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -30,6 +32,10 @@ export const HomeScreen: React.FC = () => {
       // Stats par ami
       const friendStats = await getFriendTimeStats(user.id);
       setStats(friendStats);
+
+      // Sessions actives
+      const sessions = await getActiveSessions(user.id);
+      setActiveSessions(sessions);
 
       // Stats du mois en cours
       const now = new Date();
@@ -54,6 +60,27 @@ export const HomeScreen: React.FC = () => {
     }, [user])
   );
 
+  // Rafraîchissement automatique des sessions actives toutes les 5 secondes
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (user && activeSessions.length > 0) {
+        const sessions = await getActiveSessions(user.id);
+        setActiveSessions(sessions);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [user, activeSessions.length]);
+
+  // Timer pour mettre à jour l'heure actuelle chaque seconde (pour calcul durée en temps réel)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadStats();
@@ -65,6 +92,27 @@ export const HomeScreen: React.FC = () => {
       return `${Math.round(hours * 60)} min`;
     }
     return `${hours}h`;
+  };
+
+  const formatDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}min`;
+    } else if (minutes > 0) {
+      return `${minutes}min ${secs}s`;
+    } else {
+      return `${secs}s`;
+    }
+  };
+
+  // Calcule la durée en temps réel depuis started_at (côté client)
+  const calculateLiveDuration = (startedAt: string): number => {
+    const start = new Date(startedAt);
+    const diff = Math.floor((currentTime.getTime() - start.getTime()) / 1000);
+    return Math.max(0, diff); // Évite les valeurs négatives
   };
 
   const getCurrentMonth = (): string => {
@@ -104,6 +152,29 @@ export const HomeScreen: React.FC = () => {
           </Text>
           <Text style={[styles.alertAction, { color: colors.alertAction }]}>Activer maintenant →</Text>
         </TouchableOpacity>
+      )}
+
+      {/* Sessions actives en cours */}
+      {activeSessions.length > 0 && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>🟢 Sessions en cours</Text>
+          {activeSessions.map((session) => (
+            <View key={session.id} style={[styles.activeSessionCard, { backgroundColor: colors.success + '20', borderColor: colors.success }]}>
+              <View style={styles.activeSessionHeader}>
+                <Text style={[styles.activeSessionName, { color: colors.text }]}>
+                  {session.friend?.username || 'Ami'}
+                </Text>
+                <View style={[styles.pulseDot, { backgroundColor: colors.success }]} />
+              </View>
+              <Text style={[styles.activeSessionDuration, { color: colors.success }]}>
+                {formatDuration(calculateLiveDuration(session.started_at))}
+              </Text>
+              <Text style={[styles.activeSessionLabel, { color: colors.textSecondary }]}>
+                Temps passé ensemble
+              </Text>
+            </View>
+          ))}
+        </View>
       )}
 
       {/* Carte résumé du mois */}
@@ -340,5 +411,35 @@ const styles = StyleSheet.create({
     color: '#a5b4fc',
     fontSize: normalizeFont(16),
     fontWeight: '700',
+  },
+  activeSessionCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  activeSessionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  activeSessionName: {
+    fontSize: normalizeFont(16),
+    fontWeight: '600',
+  },
+  pulseDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    opacity: 0.8,
+  },
+  activeSessionDuration: {
+    fontSize: normalizeFont(28),
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  activeSessionLabel: {
+    fontSize: normalizeFont(12),
   },
 });
