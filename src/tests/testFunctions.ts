@@ -71,8 +71,8 @@ vi.mock('../services/supabase.ts', () => ({
 vi.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: vi.fn().mockResolvedValue({ status: 'granted' }),
   requestBackgroundPermissionsAsync: vi.fn().mockResolvedValue({ status: 'granted' }),
-  startLocationUpdatesAsync: vi.fn().mockResolvedValue(),
-  stopLocationUpdatesAsync: vi.fn().mockResolvedValue(),
+  startLocationUpdatesAsync: vi.fn().mockResolvedValue(undefined),
+  stopLocationUpdatesAsync: vi.fn().mockResolvedValue(undefined),
   hasStartedLocationUpdatesAsync: vi.fn().mockResolvedValue(false),
   getCurrentPositionAsync: vi.fn().mockResolvedValue({
     coords: {
@@ -107,7 +107,7 @@ vi.mock('expo-task-manager', () => ({
  */
 export const searchUserByUsername_Test = async (): Promise<number> => {
   try {
-    const { searchUserByUsername } = await import('../services/friendService.ts');
+    const { searchUserByUsername } = await import('../services/friendService');
 
     // Cas 1: Recherche avec un nom d'utilisateur valide existant
     await searchUserByUsername('testuser');
@@ -131,7 +131,7 @@ export const searchUserByUsername_Test = async (): Promise<number> => {
  */
 export const sendFriendRequest_Test = async (): Promise<number> => {
   try {
-    const { sendFriendRequest } = await import('../services/friendService.ts');
+    const { sendFriendRequest } = await import('../services/friendService');
 
     // Cas 1: Envoi de demande avec des IDs d'utilisateurs valides
     await sendFriendRequest('user1', 'user2');
@@ -155,7 +155,7 @@ export const sendFriendRequest_Test = async (): Promise<number> => {
  */
 export const acceptFriendRequest_Test = async (): Promise<number> => {
   try {
-    const { acceptFriendRequest } = await import('../services/friendService.ts');
+    const { acceptFriendRequest } = await import('../services/friendService');
 
     // Cas 1: Acceptation d'une demande avec un ID valide
     await acceptFriendRequest('valid-id');
@@ -182,7 +182,7 @@ export const acceptFriendRequest_Test = async (): Promise<number> => {
  */
 export const rejectFriendRequest_Test = async (): Promise<number> => {
   try {
-    const { rejectFriendRequest } = await import('../services/friendService.ts');
+    const { rejectFriendRequest } = await import('../services/friendService');
 
     // Cas 1: Rejet d'une demande avec un ID valide
     await rejectFriendRequest('valid-id');
@@ -209,7 +209,7 @@ export const rejectFriendRequest_Test = async (): Promise<number> => {
  */
 export const removeFriend_Test = async (): Promise<number> => {
   try {
-    const { removeFriend } = await import('../services/friendService.ts');
+    const { removeFriend } = await import('../services/friendService');
 
     // Cas 1: Suppression d'une amitié avec un ID valide
     await removeFriend('valid-id');
@@ -236,7 +236,7 @@ export const removeFriend_Test = async (): Promise<number> => {
  */
 export const getFriends_Test = async (): Promise<number> => {
   try {
-    const { getFriends } = await import('../services/friendService.ts');
+    const { getFriends } = await import('../services/friendService');
 
     // Cas 1: Récupération des amis avec un ID utilisateur valide
     await getFriends('valid-user-id');
@@ -257,7 +257,7 @@ export const getFriends_Test = async (): Promise<number> => {
  */
 export const getPendingRequests_Test = async (): Promise<number> => {
   try {
-    const { getPendingRequests } = await import('../services/friendService.ts');
+    const { getPendingRequests } = await import('../services/friendService');
 
     // Cas 1: Récupération des demandes en attente avec un ID utilisateur valide
     await getPendingRequests('valid-user-id');
@@ -278,7 +278,7 @@ export const getPendingRequests_Test = async (): Promise<number> => {
  */
 export const getFriendTimeStats_Test = async (): Promise<number> => {
   try {
-    const { getFriendTimeStats } = await import('../services/friendService.ts');
+    const { getFriendTimeStats } = await import('../services/friendService');
 
     // Cas 1: Récupération des statistiques avec un ID utilisateur valide
     const result1 = await getFriendTimeStats('valid-user-id');
@@ -305,7 +305,7 @@ export const getFriendTimeStats_Test = async (): Promise<number> => {
  */
 export const getMonthlyStats_Test = async (): Promise<number> => {
   try {
-    const { getMonthlyStats } = await import('../services/friendService.ts');
+    const { getMonthlyStats } = await import('../services/friendService');
 
     // Cas 1: Récupération des statistiques mensuelles avec des IDs valides
     await getMonthlyStats('user-id', 'friend-id');
@@ -330,7 +330,7 @@ export const getStatsForPeriod_Test = async (): Promise<number> => {
   const endDate = new Date('2024-12-31');
 
   try {
-    const { getStatsForPeriod } = await import('../services/friendService.ts');
+    const { getStatsForPeriod } = await import('../services/friendService');
 
     // Cas 1: Récupération des statistiques pour une période avec un ID utilisateur valide
     await getStatsForPeriod('user-id', startDate, endDate);
@@ -356,7 +356,7 @@ export const getStatsForPeriod_Test = async (): Promise<number> => {
  */
 export const signUp_Test = async (): Promise<number> => {
   try {
-    const { signUp } = await import('../services/authService.ts');
+    const { signUp } = await import('../services/authService');
 
     // Cas 1: Inscription avec des données valides (email, mot de passe, username)
     const result1 = await signUp('test@example.com', 'password123', 'testuser');
@@ -389,7 +389,7 @@ export const signUp_Test = async (): Promise<number> => {
  */
 export const signIn_Test = async (): Promise<number> => {
   try {
-    const { signIn } = await import('../services/authService.ts');
+    const { signIn } = await import('../services/authService');
 
     // Cas 1: Connexion avec des identifiants valides (email et mot de passe)
     await signIn('test@example.com', 'password123');
@@ -413,7 +413,7 @@ export const signIn_Test = async (): Promise<number> => {
  */
 export const signOut_Test = async (): Promise<number> => {
   try {
-    const { signOut } = await import('../services/authService.ts');
+    const { signOut } = await import('../services/authService');
 
     // Cas 1: Déconnexion normale de l'utilisateur actuel
     await signOut();
@@ -434,7 +434,7 @@ export const signOut_Test = async (): Promise<number> => {
  */
 export const getCurrentSession_Test = async (): Promise<number> => {
   try {
-    const { getCurrentSession } = await import('../services/authService.ts');
+    const { getCurrentSession } = await import('../services/authService');
 
     // Cas 1: Récupération de la session utilisateur actuelle
     await getCurrentSession();
@@ -452,7 +452,7 @@ export const getCurrentSession_Test = async (): Promise<number> => {
  */
 export const updateProfile_Test = async (): Promise<number> => {
   try {
-    const { updateProfile } = await import('../services/authService.ts');
+    const { updateProfile } = await import('../services/authService');
 
     // Cas 1: Mise à jour du profil avec un ID valide et des données correctes
     const result1 = await updateProfile('user-id', { username: 'newusername' });
@@ -479,7 +479,7 @@ export const updateProfile_Test = async (): Promise<number> => {
  */
 export const resetPassword_Test = async (): Promise<number> => {
   try {
-    const { resetPassword } = await import('../services/authService.ts');
+    const { resetPassword } = await import('../services/authService');
 
     // Cas 1: Réinitialisation avec un email valide
     await resetPassword('test@example.com');
@@ -504,7 +504,7 @@ export const resetPassword_Test = async (): Promise<number> => {
  */
 export const initLocationService_Test = async (): Promise<number> => {
   try {
-    const { initLocationService } = await import('../services/locationService.ts');
+    const { initLocationService } = await import('../services/locationService');
 
     // Cas 1: Initialisation du service avec un ID utilisateur valide
     await initLocationService('user-id');
@@ -525,7 +525,7 @@ export const initLocationService_Test = async (): Promise<number> => {
  */
 export const getCurrentLocation_Test = async (): Promise<number> => {
   try {
-    const { getCurrentLocation } = await import('../services/locationService.ts');
+    const { getCurrentLocation } = await import('../services/locationService');
 
     // Cas 1: Récupération de la position GPS actuelle
     await getCurrentLocation();
@@ -543,7 +543,7 @@ export const getCurrentLocation_Test = async (): Promise<number> => {
  */
 export const updateUserLocation_Test = async (): Promise<number> => {
   try {
-    const { updateUserLocation } = await import('../services/locationService.ts');
+    const { updateUserLocation } = await import('../services/locationService');
 
     // Cas 1: Mise à jour avec des coordonnées GPS valides et précision acceptable
     await updateUserLocation({
@@ -574,7 +574,7 @@ export const updateUserLocation_Test = async (): Promise<number> => {
  */
 export const startTimeSession_Test = async (): Promise<number> => {
   try {
-    const { startTimeSession } = await import('../services/locationService.ts');
+    const { startTimeSession } = await import('../services/locationService');
 
     // Cas 1: Démarrage d'une session avec un ID d'ami valide
     await startTimeSession('friend-id');
@@ -595,7 +595,7 @@ export const startTimeSession_Test = async (): Promise<number> => {
  */
 export const endTimeSession_Test = async (): Promise<number> => {
   try {
-    const { endTimeSession } = await import('../services/locationService.ts');
+    const { endTimeSession } = await import('../services/locationService');
 
     // Cas 1: Fin d'une session avec un ID de session valide
     await endTimeSession('session-id');
@@ -616,7 +616,7 @@ export const endTimeSession_Test = async (): Promise<number> => {
  */
 export const isLocationTrackingActive_Test = async (): Promise<number> => {
   try {
-    const { isLocationTrackingActive } = await import('../services/locationService.ts');
+    const { isLocationTrackingActive } = await import('../services/locationService');
 
     // Cas 1: Vérification du statut du tracking de localisation
     await isLocationTrackingActive();
@@ -638,7 +638,7 @@ export const isLocationTrackingActive_Test = async (): Promise<number> => {
  */
 export const checkConnection_Test = async (): Promise<number> => {
   try {
-    const { checkConnection } = await import('../services/supabase.ts');
+    const { checkConnection } = await import('../services/supabase');
 
     // Cas 1: Vérification de la connexion à Supabase
     await checkConnection();

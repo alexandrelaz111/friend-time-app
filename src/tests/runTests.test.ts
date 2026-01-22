@@ -30,7 +30,7 @@ import {
   isLocationTrackingActive_Test,
   // Tests supabase
   checkConnection_Test,
-} from './testFunctions.ts';
+} from './testFunctions';
 
 describe('FriendTime App Tests', () => {
   describe('friendService.ts', () => {
