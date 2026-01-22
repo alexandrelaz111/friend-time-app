@@ -9,7 +9,9 @@ import {
   Alert,
   RefreshControl,
   Modal,
+  Keyboard,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -22,6 +24,7 @@ import {
   removeFriend,
 } from '../services/friendService';
 import { Friend } from '../types';
+import { successHaptic, errorHaptic, lightHaptic, warningHaptic } from '../utils/haptics';
 
 export const FriendsScreen: React.FC = () => {
   const { user } = useAuth();
@@ -64,6 +67,7 @@ export const FriendsScreen: React.FC = () => {
     if (!searchUsername.trim() || !user) return;
 
     if (searchUsername.trim().toLowerCase() === user.username.toLowerCase()) {
+      await errorHaptic();
       Alert.alert('Erreur', 'Tu ne peux pas t\'ajouter toi-même');
       return;
     }
@@ -74,6 +78,7 @@ export const FriendsScreen: React.FC = () => {
       const foundUser = await searchUserByUsername(searchUsername.trim());
 
       if (!foundUser) {
+        await errorHaptic();
         Alert.alert('Utilisateur non trouvé', `Aucun utilisateur avec le nom "${searchUsername}"`);
         return;
       }
@@ -84,10 +89,12 @@ export const FriendsScreen: React.FC = () => {
       );
 
       if (isAlreadyFriend) {
+        await warningHaptic();
         Alert.alert('Déjà amis', `Tu es déjà ami avec ${foundUser.username}`);
         return;
       }
 
+      await lightHaptic();
       Alert.alert(
         'Utilisateur trouvé',
         `Envoyer une demande d'amitié à ${foundUser.username} ?`,
@@ -98,10 +105,12 @@ export const FriendsScreen: React.FC = () => {
             onPress: async () => {
               const { success, error } = await sendFriendRequest(user.id, foundUser.id);
               if (success) {
+                await successHaptic();
                 Alert.alert('Demande envoyée', `Demande envoyée à ${foundUser.username}`);
                 setSearchUsername('');
                 setModalVisible(false);
               } else {
+                await errorHaptic();
                 Alert.alert('Erreur', error || 'Impossible d\'envoyer la demande');
               }
             },
@@ -109,6 +118,7 @@ export const FriendsScreen: React.FC = () => {
         ]
       );
     } catch (error) {
+      await errorHaptic();
       Alert.alert('Erreur', 'Une erreur est survenue');
     } finally {
       setSearching(false);
@@ -118,13 +128,16 @@ export const FriendsScreen: React.FC = () => {
   const handleAcceptRequest = async (friendship: Friend) => {
     const { success, error } = await acceptFriendRequest(friendship.id);
     if (success) {
+      await successHaptic();
       await loadData();
     } else {
+      await errorHaptic();
       Alert.alert('Erreur', error || 'Impossible d\'accepter la demande');
     }
   };
 
   const handleRejectRequest = async (friendship: Friend) => {
+    await lightHaptic();
     Alert.alert(
       'Refuser la demande',
       `Refuser la demande de ${friendship.friend?.username} ?`,
@@ -136,8 +149,10 @@ export const FriendsScreen: React.FC = () => {
           onPress: async () => {
             const { success, error } = await rejectFriendRequest(friendship.id);
             if (success) {
+              await warningHaptic();
               await loadData();
             } else {
+              await errorHaptic();
               Alert.alert('Erreur', error || 'Impossible de refuser');
             }
           },
@@ -147,6 +162,7 @@ export const FriendsScreen: React.FC = () => {
   };
 
   const handleRemoveFriend = async (friendship: Friend) => {
+    await lightHaptic();
     Alert.alert(
       'Supprimer l\'ami',
       `Supprimer ${friendship.friend?.username} de tes amis ?`,
@@ -158,8 +174,10 @@ export const FriendsScreen: React.FC = () => {
           onPress: async () => {
             const { success, error } = await removeFriend(friendship.id);
             if (success) {
+              await warningHaptic();
               await loadData();
             } else {
+              await errorHaptic();
               Alert.alert('Erreur', error || 'Impossible de supprimer');
             }
           },
@@ -178,12 +196,14 @@ export const FriendsScreen: React.FC = () => {
         <TouchableOpacity
           style={[styles.actionButton, styles.acceptButton]}
           onPress={() => handleAcceptRequest(item)}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
           <Text style={styles.actionButtonText}>Accepter</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionButton, styles.rejectButton]}
           onPress={() => handleRejectRequest(item)}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
           <Text style={[styles.actionButtonText, styles.rejectButtonText]}>Refuser</Text>
         </TouchableOpacity>
@@ -211,13 +231,15 @@ export const FriendsScreen: React.FC = () => {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <View style={styles.container}>
       {/* Header avec bouton d'ajout */}
       <View style={styles.header}>
         <Text style={styles.title}>Mes amis</Text>
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => setModalVisible(true)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Text style={styles.addButtonText}>+ Ajouter</Text>
         </TouchableOpacity>
@@ -264,8 +286,16 @@ export const FriendsScreen: React.FC = () => {
         transparent={true}
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={Keyboard.dismiss}
+        >
+          <TouchableOpacity 
+            style={styles.modalContent}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.modalTitle}>Ajouter un ami</Text>
             <Text style={styles.modalSubtitle}>
               Entre le nom d'utilisateur de ton ami
@@ -287,6 +317,7 @@ export const FriendsScreen: React.FC = () => {
                 onPress={() => {
                   setModalVisible(false);
                   setSearchUsername('');
+                  Keyboard.dismiss();
                 }}
               >
                 <Text style={styles.modalCancelText}>Annuler</Text>
@@ -302,18 +333,23 @@ export const FriendsScreen: React.FC = () => {
                 </Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#0f172a',
   },
+  container: {
+    flex: 1,
+  },
+  header: {
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -331,6 +367,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   addButtonText: {
     color: '#fff',
@@ -380,6 +419,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   acceptButton: {
     backgroundColor: '#22c55e',
@@ -489,6 +530,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
   },
   modalCancelButton: {
     backgroundColor: 'transparent',

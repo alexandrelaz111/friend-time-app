@@ -10,8 +10,12 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import { successHaptic, errorHaptic } from '../utils/haptics';
 
 interface RegisterScreenProps {
   navigation: any;
@@ -28,21 +32,25 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
   const handleRegister = async () => {
     // Validations
     if (!email.trim() || !username.trim() || !password.trim()) {
+      await errorHaptic();
       Alert.alert('Erreur', 'Veuillez remplir tous les champs');
       return;
     }
 
     if (username.length < 3) {
+      await errorHaptic();
       Alert.alert('Erreur', 'Le nom d\'utilisateur doit faire au moins 3 caractères');
       return;
     }
 
     if (password.length < 6) {
+      await errorHaptic();
       Alert.alert('Erreur', 'Le mot de passe doit faire au moins 6 caractères');
       return;
     }
 
     if (password !== confirmPassword) {
+      await errorHaptic();
       Alert.alert('Erreur', 'Les mots de passe ne correspondent pas');
       return;
     }
@@ -52,8 +60,10 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
     setLoading(false);
 
     if (error) {
+      await errorHaptic();
       Alert.alert('Erreur d\'inscription', error);
     } else {
+      await successHaptic();
       Alert.alert(
         'Compte créé !',
         'Vérifie tes emails pour confirmer ton compte.',
@@ -63,14 +73,18 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.container}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        enabled={Platform.OS === 'ios'}
+      >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>Créer un compte</Text>
@@ -134,6 +148,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
             <TouchableOpacity
               style={styles.linkButton}
               onPress={() => navigation.navigate('Login')}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Text style={styles.linkText}>
                 Déjà un compte ? <Text style={styles.linkTextBold}>Se connecter</Text>
@@ -141,15 +156,20 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
             </TouchableOpacity>
           </View>
         </View>
+        </TouchableWithoutFeedback>
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#0f172a',
+  },
+  container: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
@@ -193,6 +213,8 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
+    minHeight: 48,
+    justifyContent: 'center',
   },
   buttonDisabled: {
     opacity: 0.7,

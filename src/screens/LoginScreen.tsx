@@ -9,8 +9,12 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import { successHaptic, errorHaptic } from '../utils/haptics';
 
 interface LoginScreenProps {
   navigation: any;
@@ -24,6 +28,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
+      await errorHaptic();
       Alert.alert('Erreur', 'Veuillez remplir tous les champs');
       return;
     }
@@ -33,15 +38,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     setLoading(false);
 
     if (error) {
+      await errorHaptic();
       Alert.alert('Erreur de connexion', error);
+    } else {
+      await successHaptic();
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.container}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        enabled={Platform.OS === 'ios'}
+      >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>FriendTime</Text>
@@ -86,6 +98,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
           <TouchableOpacity
             style={styles.linkButton}
             onPress={() => navigation.navigate('Register')}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Text style={styles.linkText}>
               Pas encore de compte ? <Text style={styles.linkTextBold}>S'inscrire</Text>
@@ -93,14 +106,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </View>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#0f172a',
+  },
+  container: {
+    flex: 1,
   },
   content: {
     flex: 1,
@@ -140,6 +158,8 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
+    minHeight: 48,
+    justifyContent: 'center',
   },
   buttonDisabled: {
     opacity: 0.7,

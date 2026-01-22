@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import { Platform, PermissionsAndroid } from 'react-native';
 import { supabase } from './supabase';
 import { DEFAULT_LOCATION_CONFIG, Location as LocationType } from '../types';
 
@@ -52,7 +53,7 @@ export const initLocationService = async (userId: string): Promise<boolean> => {
   console.log('🔧 Initialisation du service de localisation pour user:', userId);
   currentUserId = userId;
 
-  // Demander les permissions
+  // Demander les permissions foreground
   console.log('📍 Demande permission foreground...');
   const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
   console.log('📍 Permission foreground:', foregroundStatus);
@@ -62,16 +63,67 @@ export const initLocationService = async (userId: string): Promise<boolean> => {
     return false;
   }
 
+  // Demander les permissions background
+  // Sur Android 11+, cette permission nécessite une approche en deux étapes
   console.log('📍 Demande permission background...');
   try {
+    // Sur Android, afficher d'abord un message explicatif si nécessaire
+    if (Platform.OS === 'android') {
+      console.log('📱 Android détecté - demande permission background avec explication');
+      
+      // Android 13+ (API 33+) : Demander la permission de notification pour le foreground service
+      if (Platform.Version >= 33) {
+        console.log('🔔 Android 13+ détecté - vérification permission notifications...');
+        try {
+          const notificationPermission = await PermissionsAndroid.check(
+            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+          );
+          
+          if (!notificationPermission) {
+            console.log('🔔 Demande permission notifications...');
+            const granted = await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+              {
+                title: 'Permission notifications',
+                message: 'FriendTime a besoin de notifications pour le tracking en arrière-plan',
+                buttonNeutral: 'Plus tard',
+                buttonNegative: 'Annuler',
+                buttonPositive: 'Autoriser',
+              }
+            );
+            
+            if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+              console.log('✅ Permission notifications accordée');
+            } else {
+              console.log('⚠️ Permission notifications refusée - le foreground service pourrait ne pas fonctionner');
+            }
+          } else {
+            console.log('✅ Permission notifications déjà accordée');
+          }
+        } catch (notifError) {
+          console.log('⚠️ Erreur vérification permission notifications:', notifError);
+        }
+      }
+      // Note: Dans une vraie app, afficher un dialogue explicatif ici
+      // avant de demander la permission background
+    }
+
     const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
     console.log('📍 Permission background:', backgroundStatus);
 
     if (backgroundStatus !== 'granted') {
-      console.log('⚠️ Permission localisation background refusée - mode foreground uniquement');
+      if (Platform.OS === 'ios') {
+        console.log('⚠️ iOS - Permission background refusée, fonctionnalités limitées');
+      } else {
+        console.log('⚠️ Android - Permission background refusée');
+        console.log('💡 L\'utilisateur peut l\'activer manuellement dans Paramètres > Apps > FriendTime > Autorisations');
+      }
     }
   } catch (bgError) {
-    console.log('⚠️ Erreur permission background (normal dans Expo Go):', bgError);
+    console.log('⚠️ Erreur permission background:', bgError);
+    if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
+      console.log('⚠️ Plateforme non supportée ou Expo Go');
+    }
   }
 
   console.log('✅ Service de localisation initialisé');
@@ -95,21 +147,28 @@ export const startLocationTracking = async (): Promise<boolean> => {
     }
 
     console.log('📍 Démarrage du tracking en arrière-plan...');
-    // Démarre le tracking en arrière-plan
+    // Démarre le tracking en arrière-plan avec configuration spécifique par plateforme
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
       accuracy: Location.Accuracy.Balanced, // Bon compromis précision/batterie
       timeInterval: DEFAULT_LOCATION_CONFIG.updateInterval * 1000, // En millisecondes
       distanceInterval: 10, // Mise à jour si déplacement de 10m minimum
       deferredUpdatesInterval: 60000, // Regrouper les mises à jour toutes les minutes
       deferredUpdatesDistance: 50, // Ou si déplacement de 50m
-      showsBackgroundLocationIndicator: true, // Indicateur iOS
-      foregroundService: {
-        notificationTitle: 'FriendTime',
-        notificationBody: 'Tracking du temps avec vos amis actif',
-        notificationColor: '#6366f1',
-      },
-      pausesUpdatesAutomatically: false,
-      activityType: Location.ActivityType.Other,
+      // Options spécifiques par plateforme
+      ...Platform.select({
+        ios: {
+          showsBackgroundLocationIndicator: true, // Indicateur de localisation iOS
+          pausesUpdatesAutomatically: false, // Ne pas mettre en pause automatiquement
+          activityType: Location.ActivityType.Other, // Type d'activité
+        },
+        android: {
+          foregroundService: {
+            notificationTitle: 'FriendTime',
+            notificationBody: 'Tracking du temps avec vos amis actif',
+            notificationColor: '#6366f1',
+          },
+        },
+      }),
     });
 
     console.log('✅ Tracking de localisation démarré avec succès!');
