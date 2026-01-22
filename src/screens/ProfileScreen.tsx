@@ -8,7 +8,9 @@ import {
   ScrollView,
   Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import { successHaptic, lightHaptic } from '../utils/haptics';
 
 export const ProfileScreen: React.FC = () => {
   const { user, signOut, isLocationEnabled, enableLocation, disableLocation } = useAuth();
@@ -22,8 +24,11 @@ export const ProfileScreen: React.FC = () => {
           'Permission requise',
           'Autorise l\'accès à la localisation dans les paramètres de ton téléphone pour utiliser cette fonctionnalité.'
         );
+      } else {
+        await successHaptic();
       }
     } else {
+      await lightHaptic();
       Alert.alert(
         'Désactiver le tracking',
         'Tu ne pourras plus mesurer le temps passé avec tes amis. Continuer ?',
@@ -40,6 +45,7 @@ export const ProfileScreen: React.FC = () => {
   };
 
   const handleSignOut = () => {
+    lightHaptic();
     Alert.alert(
       'Déconnexion',
       'Tu es sûr de vouloir te déconnecter ?',
@@ -58,7 +64,8 @@ export const ProfileScreen: React.FC = () => {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Profil */}
       <View style={styles.profileCard}>
         <View style={styles.avatar}>
@@ -92,7 +99,10 @@ export const ProfileScreen: React.FC = () => {
         </View>
 
         <View style={styles.settingCard}>
-          <TouchableOpacity style={styles.settingRow}>
+          <TouchableOpacity 
+            style={styles.settingRow}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <View style={styles.settingInfo}>
               <Text style={styles.settingLabel}>Distance de proximité</Text>
               <Text style={styles.settingDescription}>
@@ -143,13 +153,17 @@ export const ProfileScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
     </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#0f172a',
+  },
+  container: {
+    flex: 1,
   },
   content: {
     padding: 16,
@@ -257,6 +271,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 12,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   logoutText: {
     color: '#fff',

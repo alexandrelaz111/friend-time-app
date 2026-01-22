@@ -1,3 +1,45 @@
+import { Dimensions, Platform, PixelRatio } from 'react-native';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Dimensions de référence (iPhone 11 Pro)
+const baseWidth = 375;
+const baseHeight = 812;
+
+/**
+ * Normalise une dimension pour qu'elle s'adapte à différentes tailles d'écran
+ * Utilise la largeur de l'écran comme référence
+ */
+export const normalize = (size: number, based: 'width' | 'height' = 'width'): number => {
+  const newSize = based === 'height' 
+    ? size * (SCREEN_HEIGHT / baseHeight)
+    : size * (SCREEN_WIDTH / baseWidth);
+  
+  if (Platform.OS === 'ios') {
+    return Math.round(PixelRatio.roundToNearestPixel(newSize));
+  } else {
+    return Math.round(PixelRatio.roundToNearestPixel(newSize)) - 2;
+  }
+};
+
+/**
+ * Normalise une taille de police
+ */
+export const normalizeFont = (size: number): number => {
+  return normalize(size, 'width');
+};
+
+/**
+ * Retourne les dimensions de l'écran
+ */
+export const getScreenDimensions = () => ({
+  width: SCREEN_WIDTH,
+  height: SCREEN_HEIGHT,
+  isSmallDevice: SCREEN_WIDTH < 375,
+  isMediumDevice: SCREEN_WIDTH >= 375 && SCREEN_WIDTH < 414,
+  isLargeDevice: SCREEN_WIDTH >= 414,
+});
+
 /**
  * Calcule la distance entre deux points GPS en mètres (formule Haversine)
  */

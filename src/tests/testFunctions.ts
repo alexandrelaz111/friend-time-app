@@ -4,7 +4,7 @@
 import { vi } from 'vitest';
 
 // Mock Supabase pour tous les tests
-vi.mock('../services/supabase.ts', () => ({
+vi.mock('../services/supabase', () => ({
   supabase: {
     from: vi.fn((table: string) => ({
       select: vi.fn((columns?: string) => ({
@@ -375,7 +375,10 @@ export const signUp_Test = async (): Promise<number> => {
     if (typeof result3 !== 'object' || result3 === null) {
       return -3; // Devrait retourner un objet
     }
+
+    return 1; // Succès: tous les cas passent
   } catch (error) {
+    console.error('Error in signUp_Test:', error);
     return -4; // Échec si erreur
   }
 

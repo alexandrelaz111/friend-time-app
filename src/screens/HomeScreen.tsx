@@ -7,13 +7,17 @@ import {
   RefreshControl,
   TouchableOpacity,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { getFriendTimeStats, getStatsForPeriod } from '../services/friendService';
 import { FriendTimeStats } from '../types';
+import { normalizeFont } from '../utils/helpers';
+import { useTheme } from '../theme/colors';
 
 export const HomeScreen: React.FC = () => {
   const { user, isLocationEnabled, enableLocation } = useAuth();
+  const { colors } = useTheme();
   const [stats, setStats] = useState<FriendTimeStats[]>([]);
   const [monthlyTotal, setMonthlyTotal] = useState({ hours: 0, friends: 0 });
   const [refreshing, setRefreshing] = useState(false);
@@ -72,19 +76,20 @@ export const HomeScreen: React.FC = () => {
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />
-      }
-    >
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />
+        }
+      >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.greeting}>Salut {user?.username} !</Text>
-        <View style={styles.statusBadge}>
+        <Text style={[styles.greeting, { color: colors.text }]}>Salut {user?.username} !</Text>
+        <View style={[styles.statusBadge, { backgroundColor: colors.surface }]}>
           <View style={[styles.statusDot, isLocationEnabled ? styles.statusActive : styles.statusInactive]} />
-          <Text style={styles.statusText}>
+          <Text style={[styles.statusText, { color: colors.textSecondary }]}>
             {isLocationEnabled ? 'Tracking actif' : 'Tracking inactif'}
           </Text>
         </View>
@@ -92,24 +97,24 @@ export const HomeScreen: React.FC = () => {
 
       {/* Alerte si localisation désactivée */}
       {!isLocationEnabled && (
-        <TouchableOpacity style={styles.alertCard} onPress={enableLocation}>
-          <Text style={styles.alertTitle}>Localisation désactivée</Text>
-          <Text style={styles.alertText}>
-            Active la localisation pour mesurer le temps passé avec tes amis
+        <TouchableOpacity style={[styles.alertCard, { backgroundColor: colors.alertBackground }]} onPress={enableLocation}>
+          <Text style={[styles.alertTitle, { color: colors.text }]}>⚠️ Tracking désactivé</Text>
+          <Text style={[styles.alertText, { color: colors.alertText }]}>
+            Active la localisation pour commencer à mesurer le temps passé avec tes amis.
           </Text>
-          <Text style={styles.alertAction}>Activer maintenant</Text>
+          <Text style={[styles.alertAction, { color: colors.alertAction }]}>Activer maintenant →</Text>
         </TouchableOpacity>
       )}
 
       {/* Carte résumé du mois */}
-      <View style={styles.summaryCard}>
+      <View style={[styles.summaryCard, { backgroundColor: colors.primary }]}>
         <Text style={styles.summaryTitle}>{getCurrentMonth()} 2025</Text>
         <View style={styles.summaryStats}>
           <View style={styles.summaryStat}>
             <Text style={styles.summaryValue}>{formatTime(monthlyTotal.hours)}</Text>
             <Text style={styles.summaryLabel}>passées ensemble</Text>
           </View>
-          <View style={styles.summaryDivider} />
+          <View style={[styles.summaryDivider, { backgroundColor: colors.primaryLight }]} />
           <View style={styles.summaryStat}>
             <Text style={styles.summaryValue}>{monthlyTotal.friends}</Text>
             <Text style={styles.summaryLabel}>amis vus</Text>
@@ -119,28 +124,28 @@ export const HomeScreen: React.FC = () => {
 
       {/* Liste des amis avec temps */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Temps par ami</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Temps par ami</Text>
 
         {loading ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>Chargement...</Text>
+          <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Chargement...</Text>
           </View>
         ) : stats.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Pas encore de données</Text>
-            <Text style={styles.emptyText}>
+          <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>Pas encore de données</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               Ajoute des amis et passe du temps avec eux pour voir tes statistiques
             </Text>
           </View>
         ) : (
           stats.map((stat, index) => (
-            <View key={stat.friend_id} style={styles.friendCard}>
-              <View style={styles.friendRank}>
-                <Text style={styles.friendRankText}>#{index + 1}</Text>
+            <View key={stat.friend_id} style={[styles.friendCard, { backgroundColor: colors.surface }]}>
+              <View style={[styles.friendRank, { backgroundColor: colors.surfaceSecondary }]}>
+                <Text style={[styles.friendRankText, { color: colors.textSecondary }]}>#{index + 1}</Text>
               </View>
               <View style={styles.friendInfo}>
-                <Text style={styles.friendName}>{stat.friend.username}</Text>
-                <Text style={styles.friendMeta}>
+                <Text style={[styles.friendName, { color: colors.text }]}>{stat.friend.username}</Text>
+                <Text style={[styles.friendMeta, { color: colors.textTertiary }]}>
                   {stat.sessions_count} session{stat.sessions_count > 1 ? 's' : ''}
                   {stat.last_seen && ` • Vu le ${new Date(stat.last_seen).toLocaleDateString('fr-FR')}`}
                 </Text>
@@ -153,13 +158,17 @@ export const HomeScreen: React.FC = () => {
         )}
       </View>
     </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#0f172a',
+  },
+  container: {
+    flex: 1,
   },
   content: {
     padding: 16,
@@ -173,7 +182,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   greeting: {
-    fontSize: 24,
+    fontSize: normalizeFont(24),
     fontWeight: 'bold',
     color: '#fff',
   },
@@ -199,28 +208,29 @@ const styles = StyleSheet.create({
   },
   statusText: {
     color: '#94a3b8',
-    fontSize: 12,
+    fontSize: normalizeFont(12),
   },
   alertCard: {
     backgroundColor: '#7c2d12',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
+    minHeight: 44,
   },
   alertTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: normalizeFont(16),
     fontWeight: '600',
     marginBottom: 4,
   },
   alertText: {
     color: '#fed7aa',
-    fontSize: 14,
+    fontSize: normalizeFont(14),
     marginBottom: 8,
   },
   alertAction: {
     color: '#fb923c',
-    fontSize: 14,
+    fontSize: normalizeFont(14),
     fontWeight: '600',
   },
   summaryCard: {
@@ -231,7 +241,7 @@ const styles = StyleSheet.create({
   },
   summaryTitle: {
     color: '#e0e7ff',
-    fontSize: 14,
+    fontSize: normalizeFont(14),
     fontWeight: '500',
     textAlign: 'center',
     marginBottom: 16,
@@ -246,12 +256,12 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     color: '#fff',
-    fontSize: 36,
+    fontSize: normalizeFont(36),
     fontWeight: 'bold',
   },
   summaryLabel: {
     color: '#c7d2fe',
-    fontSize: 12,
+    fontSize: normalizeFont(12),
     marginTop: 4,
   },
   summaryDivider: {
@@ -264,7 +274,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: normalizeFont(18),
     fontWeight: '600',
     marginBottom: 16,
   },
@@ -276,13 +286,13 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: normalizeFont(16),
     fontWeight: '600',
     marginBottom: 8,
   },
   emptyText: {
     color: '#94a3b8',
-    fontSize: 14,
+    fontSize: normalizeFont(14),
     textAlign: 'center',
   },
   friendCard: {
@@ -304,7 +314,7 @@ const styles = StyleSheet.create({
   },
   friendRankText: {
     color: '#94a3b8',
-    fontSize: 12,
+    fontSize: normalizeFont(12),
     fontWeight: '600',
   },
   friendInfo: {
@@ -312,12 +322,12 @@ const styles = StyleSheet.create({
   },
   friendName: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: normalizeFont(16),
     fontWeight: '600',
   },
   friendMeta: {
     color: '#64748b',
-    fontSize: 12,
+    fontSize: normalizeFont(12),
     marginTop: 2,
   },
   friendTime: {
@@ -328,7 +338,7 @@ const styles = StyleSheet.create({
   },
   friendTimeValue: {
     color: '#a5b4fc',
-    fontSize: 16,
+    fontSize: normalizeFont(16),
     fontWeight: '700',
   },
 });
