@@ -10,6 +10,16 @@ export const LOCATION_TASK_NAME = 'FRIEND_TIME_BACKGROUND_LOCATION';
 // Variable pour stocker l'ID utilisateur actuel
 let currentUserId: string | null = null;
 
+// Intervalle de nettoyage périodique (optionnel)
+let cleanupInterval: NodeJS.Timeout | null = null;
+
+// Stocke la dernière position mise à jour et son timestamp
+let lastLocationUpdate: {
+  latitude: number;
+  longitude: number;
+  timestamp: number;
+} | null = null;
+
 /**
  * Définit la tâche de géolocalisation en arrière-plan
  * Cette tâche s'exécute même quand l'app est fermée
@@ -52,6 +62,11 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 export const initLocationService = async (userId: string): Promise<boolean> => {
   console.log('🔧 Initialisation du service de localisation pour user:', userId);
   currentUserId = userId;
+  lastLocationUpdate = null; // Réinitialiser pour nouveau user
+
+  // Nettoyer les sessions obsolètes au démarrage
+  console.log('🧹 Nettoyage des sessions obsolètes au démarrage...');
+  await cleanupStaleSessions();
 
   // Demander les permissions foreground
   console.log('📍 Demande permission foreground...');
@@ -202,17 +217,21 @@ let foregroundSubscription: Location.LocationSubscription | null = null;
 
 export const startForegroundTracking = async (): Promise<void> => {
   console.log('📍 Démarrage tracking foreground...');
+  console.log(`📍 Configuration: timeInterval=${DEFAULT_LOCATION_CONFIG.updateInterval}s, distanceInterval=10m, currentUserId=${currentUserId}`);
 
   foregroundSubscription = await Location.watchPositionAsync(
     {
       accuracy: Location.Accuracy.Balanced,
-      timeInterval: 30000, // 30 secondes
-      distanceInterval: 10, // 10 mètres
+      timeInterval: DEFAULT_LOCATION_CONFIG.updateInterval * 1000,
+      distanceInterval: 10,
     },
     async (location) => {
-      console.log('📍 Position reçue:', location.coords.latitude, location.coords.longitude);
+      console.log(`📍 Position reçue: (${location.coords.latitude}, ${location.coords.longitude}), accuracy: ${location.coords.accuracy}m`);
 
-      if (!currentUserId) return;
+      if (!currentUserId) {
+        console.warn('⚠️ Position ignorée - currentUserId null');
+        return;
+      }
 
       await updateUserLocation({
         latitude: location.coords.latitude,
@@ -252,10 +271,17 @@ export const stopLocationTracking = async (): Promise<void> => {
     foregroundSubscription = null;
     console.log('Tracking foreground arrêté');
   }
+
+  // Arrête le nettoyage périodique
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+    console.log('Nettoyage périodique arrêté');
+  }
 };
 
 /**
- * Obtient la position actuelle (one-shot)
+ * Récupère la position actuelle de l'utilisateur
  */
 export const getCurrentLocation = async (): Promise<LocationType | null> => {
   try {
@@ -276,16 +302,59 @@ export const getCurrentLocation = async (): Promise<LocationType | null> => {
 };
 
 /**
+ * Calcule la distance entre deux points (formule Haversine simplifiée)
+ * Retourne la distance en mètres
+ */
+const calculateDistanceBetweenCoords = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371000; // Rayon de la Terre en mètres
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+/**
  * Met à jour la position de l'utilisateur dans Supabase
+ * Logique: Met à jour si déplacement > 5m OU force mise à jour toutes les 120s
+ * Cela garantit que get_nearby_friends() trouvera toujours des positions < 2 min
  */
 export const updateUserLocation = async (location: LocationType): Promise<void> => {
   if (!currentUserId) return;
 
   // Vérifie la précision
   if (location.accuracy && location.accuracy > DEFAULT_LOCATION_CONFIG.minAccuracy) {
-    console.log('Position ignorée: précision insuffisante');
+    console.log('📍 Position ignorée: précision insuffisante');
     return;
   }
+
+  const now = Date.now();
+  const shouldUpdate =
+    !lastLocationUpdate || // Première mise à jour
+    now - lastLocationUpdate.timestamp >= 120 * 1000 || // 120 secondes écoulées
+    calculateDistanceBetweenCoords(
+      lastLocationUpdate.latitude,
+      lastLocationUpdate.longitude,
+      location.latitude,
+      location.longitude
+    ) >= 5; // Déplacement > 5 mètres
+
+  if (!shouldUpdate) {
+    console.log('📍 Position ignorée: déplacement < 5m et < 120s');
+    return;
+  }
+
+  // Mettre à jour la position locale
+  lastLocationUpdate = {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    timestamp: now,
+  };
 
   const { error } = await supabase
     .from('user_locations')
@@ -306,64 +375,103 @@ export const updateUserLocation = async (location: LocationType): Promise<void> 
 
 /**
  * Vérifie la proximité avec les amis et gère les sessions
+ * Implémente une hysteresis: ouverture à 50m, fermeture à 60m
  */
 export const checkProximityWithFriends = async (
   latitude: number,
   longitude: number
 ): Promise<void> => {
-  console.log(`🔍 Vérification proximité pour user ${currentUserId} à position (${latitude}, ${longitude})`);
-  
   if (!currentUserId) {
-    console.log('⚠️ Pas de currentUserId - vérification proximité annulée');
+    console.log('⚠️ Proximité annulée - currentUserId null');
     return;
   }
 
   try {
-    // Appelle la fonction Supabase pour trouver les amis proches
-    console.log(`📡 Appel RPC get_nearby_friends avec seuil: ${DEFAULT_LOCATION_CONFIG.proximityThreshold}m`);
-    const { data: nearbyFriends, error } = await supabase.rpc('get_nearby_friends', {
+    console.log(`🔍 Vérification proximité pour user ${currentUserId} à (${latitude.toFixed(6)}, ${longitude.toFixed(6)})`);
+    
+    // HYSTERESIS: Deux seuils différents
+    // Ouverture: < 50m (seuil par défaut)
+    const { data: nearbyFriends, error: errorNearby } = await supabase.rpc('get_nearby_friends', {
       p_user_id: currentUserId,
       p_latitude: latitude,
       p_longitude: longitude,
-      p_threshold_meters: DEFAULT_LOCATION_CONFIG.proximityThreshold,
+      p_threshold_meters: 50, // Seuil d'ouverture
     });
 
-    if (error) {
-      console.error('❌ Erreur vérification proximité:', error);
+    if (errorNearby) {
+      console.error('❌ Erreur vérification proximité:', errorNearby);
       return;
     }
 
-    console.log(`📊 Amis proches trouvés: ${nearbyFriends?.length || 0}`, nearbyFriends);
+    // Fermeture: < 60m (hysteresis = marge de 10m)
+    const { data: nearbyFriendsForKeeping, error: errorKeeping } = await supabase.rpc('get_nearby_friends', {
+      p_user_id: currentUserId,
+      p_latitude: latitude,
+      p_longitude: longitude,
+      p_threshold_meters: 60, // Seuil de fermeture (plus permissif)
+    });
 
-    // Récupère les sessions actives de l'utilisateur
-    const { data: activeSessions } = await supabase
+    if (errorKeeping) {
+      console.error('❌ Erreur vérification hysteresis:', errorKeeping);
+      return;
+    }
+
+    console.log(`📊 Amis proches (< 50m) trouvés: ${nearbyFriends?.length || 0}`, nearbyFriends);
+    console.log(`📊 Amis à garder (< 60m) trouvés: ${nearbyFriendsForKeeping?.length || 0}`, nearbyFriendsForKeeping);
+
+    // Récupère les sessions actives (bidirectionnelles: user_id OU friend_id)
+    const { data: sessionsAsUser } = await supabase
       .from('time_sessions')
       .select('*')
       .eq('user_id', currentUserId)
       .eq('is_active', true);
 
-    console.log(`📝 Sessions actives: ${activeSessions?.length || 0}`, activeSessions);
+    const { data: sessionsAsFriend } = await supabase
+      .from('time_sessions')
+      .select('*')
+      .eq('friend_id', currentUserId)
+      .eq('is_active', true);
 
+    const allActiveSessions = [
+      ...(sessionsAsUser || []),
+      ...(sessionsAsFriend || []),
+    ];
+
+    console.log(`📝 Sessions actives: ${allActiveSessions?.length || 0}`, allActiveSessions);
+
+    // Construire le set des friend_ids actifs (avec currentUserId)
     const activeSessionFriendIds = new Set(
-      (activeSessions || []).map(s => s.friend_id)
+      allActiveSessions.map(s => 
+        s.user_id === currentUserId ? s.friend_id : s.user_id
+      )
     );
     const nearbyFriendIds = new Set(
       (nearbyFriends || []).map((f: any) => f.friend_id)
     );
+    
+    // Set des amis à garder dans les sessions (seuil 60m = hysteresis)
+    const keepSessionFriendIds = new Set(
+      (nearbyFriendsForKeeping || []).map((f: any) => f.friend_id)
+    );
+
+    console.log(`🔑 Friend IDs sessions actives: [${Array.from(activeSessionFriendIds).join(', ')}]`);
+    console.log(`🔑 Friend IDs proches (< 50m): [${Array.from(nearbyFriendIds).join(', ')}]`);
+    console.log(`🔑 Friend IDs à garder (< 60m): [${Array.from(keepSessionFriendIds).join(', ')}]`);
 
     // Démarrer de nouvelles sessions pour les amis nouvellement proches
     for (const friend of nearbyFriends || []) {
       if (!activeSessionFriendIds.has(friend.friend_id)) {
         await startTimeSession(friend.friend_id);
-        console.log(`🎉 ✅ NOUVELLE SESSION DÉMARRÉE avec ${friend.username} (ID: ${friend.friend_id}) - Distance: ${Math.round(friend.distance)}m`);
+        console.log(`🎉 Session démarrée avec ${friend.username} (${Math.round(friend.distance)}m)`);
       }
     }
 
-    // Terminer les sessions pour les amis qui ne sont plus proches
-    for (const session of activeSessions || []) {
-      if (!nearbyFriendIds.has(session.friend_id)) {
+    // Terminer les sessions pour les amis qui ne sont plus proches (> 60m)
+    for (const session of allActiveSessions || []) {
+      const friendIdInSession = session.user_id === currentUserId ? session.friend_id : session.user_id;
+      if (!keepSessionFriendIds.has(friendIdInSession)) {
         await endTimeSession(session.id);
-        console.log(`🛑 Session terminée avec ami ${session.friend_id} (trop éloigné)`);
+        console.log(`🛑 Session terminée avec ami ${friendIdInSession}`);
       }
     }
   } catch (error) {
@@ -373,25 +481,40 @@ export const checkProximityWithFriends = async (
 
 /**
  * Démarre une nouvelle session de temps avec un ami
+ * Architecture bidirectionnelle: UNE SEULE session pour les deux users
+ * Convention: user_id < friend_id (alphabétiquement) pour éviter doublons
  */
 export const startTimeSession = async (friendId: string): Promise<void> => {
   if (!currentUserId) return;
 
+  // Vérifier si une session active existe DÉJÀ (dans les deux sens)
+  const { data: existingSession } = await supabase
+    .from('time_sessions')
+    .select('id')
+    .or(`and(user_id.eq.${currentUserId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${currentUserId})`)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (existingSession) {
+    console.log('✅ Session déjà existante, pas de doublon créé');
+    return;
+  }
+
+  // Créer UNE session unique avec convention: user_id < friend_id
+  const [userId1, userId2] = [currentUserId, friendId].sort();
   const startedAt = new Date().toISOString();
   
   const { error } = await supabase
     .from('time_sessions')
     .insert({
-      user_id: currentUserId,
-      friend_id: friendId,
+      user_id: userId1,
+      friend_id: userId2,
       started_at: startedAt,
       is_active: true,
     });
 
   if (error) {
     console.error('❌ Erreur démarrage session:', error);
-  } else {
-    console.log(`✅ Session enregistrée en DB - User: ${currentUserId}, Friend: ${friendId}, Started: ${startedAt}`);
   }
 };
 
@@ -444,4 +567,50 @@ export const isLocationTrackingActive = async (): Promise<boolean> => {
  */
 export const setCurrentUserId = (userId: string | null): void => {
   currentUserId = userId;
+};
+
+/**
+ * Nettoie les sessions obsolètes (positions pas à jour)
+ * Utile à appeler au démarrage de l'app ou périodiquement
+ */
+export const cleanupStaleSessions = async (): Promise<number> => {
+  try {
+    const { data, error } = await supabase.rpc('end_stale_sessions', {
+      p_max_inactivity_minutes: 3,
+    });
+
+    if (error) {
+      console.error('Erreur nettoyage sessions:', error);
+      return 0;
+    }
+
+    const count = data?.length || 0;
+    if (count > 0) {
+      console.log(`🧹 ${count} session(s) obsolète(s) nettoyée(s)`);
+    }
+    return count;
+  } catch (error) {
+    console.error('Erreur nettoyage sessions:', error);
+    return 0;
+  }
+};
+
+/**
+ * Démarre un nettoyage périodique des sessions obsolètes (optionnel)
+ * Utile comme filet de sécurité pour attraper les cas edge
+ * @param intervalMinutes Intervalle en minutes (défaut: 5 min)
+ */
+export const startPeriodicCleanup = (intervalMinutes: number = 5): void => {
+  // Arrête l'intervalle existant si présent
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+  }
+
+  // Démarre le nettoyage périodique
+  cleanupInterval = setInterval(() => {
+    console.log('🕐 Nettoyage périodique des sessions...');
+    cleanupStaleSessions();
+  }, intervalMinutes * 60 * 1000);
+
+  console.log(`✅ Nettoyage périodique démarré (toutes les ${intervalMinutes} min)`);
 };

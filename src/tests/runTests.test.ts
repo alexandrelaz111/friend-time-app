@@ -13,6 +13,7 @@ import {
   getPendingRequests_Test,
   getFriendTimeStats_Test,
   getMonthlyStats_Test,
+  getActiveSessions_Test,
   getStatsForPeriod_Test,
   // Tests authService
   signUp_Test,
@@ -23,10 +24,14 @@ import {
   resetPassword_Test,
   // Tests locationService
   initLocationService_Test,
+  startLocationTracking_Test,
+  stopLocationTracking_Test,
   getCurrentLocation_Test,
   updateUserLocation_Test,
+  checkProximityWithFriends_Test,
   startTimeSession_Test,
   endTimeSession_Test,
+  cleanupStaleSessions_Test,
   isLocationTrackingActive_Test,
   // Tests supabase
   checkConnection_Test,
@@ -83,6 +88,11 @@ describe('FriendTime App Tests', () => {
       const result = await getStatsForPeriod_Test();
       expect(result).toBe(1);
     });
+
+    it('getActiveSessions should pass all test cases', async () => {
+      const result = await getActiveSessions_Test();
+      expect(result).toBe(1);
+    });
   });
 
   describe('authService.ts', () => {
@@ -123,6 +133,16 @@ describe('FriendTime App Tests', () => {
       expect(result).toBe(1);
     });
 
+    it('startLocationTracking should pass all test cases', async () => {
+      const result = await startLocationTracking_Test();
+      expect(result).toBe(1);
+    });
+
+    it('stopLocationTracking should pass all test cases', async () => {
+      const result = await stopLocationTracking_Test();
+      expect(result).toBe(1);
+    });
+
     it('getCurrentLocation should pass all test cases', async () => {
       const result = await getCurrentLocation_Test();
       expect(result).toBe(1);
@@ -133,6 +153,11 @@ describe('FriendTime App Tests', () => {
       expect(result).toBe(1);
     });
 
+    it('checkProximityWithFriends should pass all test cases', async () => {
+      const result = await checkProximityWithFriends_Test();
+      expect(result).toBe(1);
+    });
+
     it('startTimeSession should pass all test cases', async () => {
       const result = await startTimeSession_Test();
       expect(result).toBe(1);
@@ -140,6 +165,11 @@ describe('FriendTime App Tests', () => {
 
     it('endTimeSession should pass all test cases', async () => {
       const result = await endTimeSession_Test();
+      expect(result).toBe(1);
+    });
+
+    it('cleanupStaleSessions should pass all test cases', async () => {
+      const result = await cleanupStaleSessions_Test();
       expect(result).toBe(1);
     });
 

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User } from '../types';
 import { getCurrentSession, onAuthStateChange, signIn, signOut, signUp } from '../services/authService';
-import { initLocationService, startLocationTracking, stopLocationTracking } from '../services/locationService';
+import { initLocationService, startLocationTracking, stopLocationTracking, startPeriodicCleanup } from '../services/locationService';
 
 interface AuthContextType {
   user: User | null;
@@ -25,17 +25,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     // Vérifie la session au démarrage
     const checkSession = async () => {
-      const currentUser = await getCurrentSession();
-      setUser(currentUser);
-      setLoading(false);
+      try {
+        console.log('🔍 Vérification session...');
+        const currentUser = await getCurrentSession();
+        console.log('👤 Session:', currentUser ? 'connecté' : 'non connecté');
+        setUser(currentUser);
+        setLoading(false);
 
-      // Si connecté, initialise la localisation
-      if (currentUser) {
-        const enabled = await initLocationService(currentUser.id);
-        if (enabled) {
-          await startLocationTracking();
-          setIsLocationEnabled(true);
+        // Si connecté, initialise la localisation
+        if (currentUser) {
+          console.log('📍 Initialisation localisation...');
+          const enabled = await initLocationService(currentUser.id);
+          if (enabled) {
+            console.log('🚀 Démarrage tracking...');
+            await startLocationTracking();
+            setIsLocationEnabled(true);
+            startPeriodicCleanup(5);
+            console.log('✅ AuthProvider initialisé');
+          }
+        } else {
+          console.log('✅ AuthProvider initialisé (pas de session)');
         }
+      } catch (error) {
+        console.error('❌ Erreur checkSession:', error);
+        setLoading(false);
       }
     };
 
@@ -61,6 +74,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (enabled) {
         await startLocationTracking();
         setIsLocationEnabled(true);
+        // Optionnel : nettoyage périodique
+        startPeriodicCleanup(5);
       }
     }
 
@@ -91,6 +106,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (enabled) {
       await startLocationTracking();
       setIsLocationEnabled(true);
+      // Optionnel : nettoyage périodique
+      startPeriodicCleanup(5);
       return true;
     }
     return false;

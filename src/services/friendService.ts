@@ -238,6 +238,44 @@ export const getFriendTimeStats = async (
 };
 
 /**
+ * Récupère les statistiques en TEMPS RÉEL en incluant les sessions actives
+ * Ajoute le temps qui s'écoule depuis le started_at pour les sessions actives
+ */
+export const getFriendTimeStatsLive = async (
+  userId: string,
+  currentTime: Date,
+  activeSessions: any[] = []
+): Promise<FriendTimeStats[]> => {
+  // Récupère les stats de base (sessions terminées)
+  const baseStats = await getFriendTimeStats(userId);
+
+  // Ajouter le temps des sessions actives
+  const statsWithLive = baseStats.map(stat => {
+    const activeSessForFriend = activeSessions.filter(
+      s => s.friend_id === stat.friend_id
+    );
+
+    // Calculer la durée des sessions actives
+    const activeDuration = activeSessForFriend.reduce((sum, session) => {
+      const startTime = new Date(session.started_at).getTime();
+      const elapsed = Math.floor((currentTime.getTime() - startTime) / 1000);
+      return sum + Math.max(0, elapsed);
+    }, 0);
+
+    const totalSeconds = stat.total_seconds + activeDuration;
+
+    return {
+      ...stat,
+      total_seconds: totalSeconds,
+      total_hours: Math.round((totalSeconds / 3600) * 10) / 10,
+    };
+  });
+
+  // Re-trier par temps passé (décroissant)
+  return statsWithLive.sort((a, b) => b.total_seconds - a.total_seconds);
+};
+
+/**
  * Récupère les statistiques mensuelles avec un ami
  */
 export const getMonthlyStats = async (
@@ -262,13 +300,98 @@ export const getMonthlyStats = async (
 };
 
 /**
- * Récupère les sessions actives en cours
+ * Récupère les stats mensuelles EN TEMPS RÉEL pour une période
+ * Ajoute le temps des sessions actives au mois courant
+ */
+export const getStatsForPeriodLive = async (
+  userId: string,
+  startDate: Date,
+  endDate: Date,
+  currentTime: Date,
+  activeSessions: any[] = []
+): Promise<{ totalHours: number; friendsCount: number; topFriend: User | null }> => {
+  // Récupérer les sessions terminées (bidirectionnellement)
+  const { data: sessionsAsUser } = await supabase
+    .from('time_sessions')
+    .select('duration_seconds, friend_id, user_id')
+    .eq('user_id', userId)
+    .eq('is_active', false)
+    .gte('started_at', startDate.toISOString())
+    .lte('ended_at', endDate.toISOString());
+
+  const { data: sessionsAsFriend } = await supabase
+    .from('time_sessions')
+    .select('duration_seconds, friend_id, user_id')
+    .eq('friend_id', userId)
+    .eq('is_active', false)
+    .gte('started_at', startDate.toISOString())
+    .lte('ended_at', endDate.toISOString());
+
+  // Normaliser: friend_id doit toujours être "l'autre" personne
+  const allSessions = [
+    ...(sessionsAsUser || []),
+    ...(sessionsAsFriend || []).map(s => ({
+      duration_seconds: s.duration_seconds,
+      friend_id: s.user_id, // Inverser
+    }))
+  ];
+
+  // Ajouter la durée des sessions ACTIVES de ce mois
+  for (const session of activeSessions) {
+    const startTime = new Date(session.started_at);
+    // Vérifier si la session active est dans la période
+    if (startTime >= startDate && startTime <= endDate) {
+      const elapsed = Math.floor((currentTime.getTime() - startTime.getTime()) / 1000);
+      allSessions.push({
+        duration_seconds: Math.max(0, elapsed),
+        friend_id: session.friend_id,
+      });
+    }
+  }
+
+  if (allSessions.length === 0) {
+    return { totalHours: 0, friendsCount: 0, topFriend: null };
+  }
+
+  const totalSeconds = allSessions.reduce((sum, s) => sum + (s.duration_seconds || 0), 0);
+  const friendIds = new Set(allSessions.map(s => s.friend_id));
+
+  // Trouve l'ami avec qui on a passé le plus de temps
+  const friendTotals: Record<string, number> = {};
+  for (const session of allSessions) {
+    friendTotals[session.friend_id] = (friendTotals[session.friend_id] || 0) + session.duration_seconds;
+  }
+
+  const topFriendId = Object.entries(friendTotals).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  let topFriend: User | null = null;
+  if (topFriendId) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', topFriendId)
+      .single();
+    topFriend = data as User;
+  }
+
+  return {
+    totalHours: Math.round((totalSeconds / 3600) * 10) / 10,
+    friendsCount: friendIds.size,
+    topFriend,
+  };
+};
+
+/**
+ * Récupère les sessions actives en cours (architecture bidirectionnelle)
+ * Retourne les sessions où l'utilisateur est soit user_id soit friend_id
  */
 export const getActiveSessions = async (userId: string) => {
-  const { data: sessions, error } = await supabase
+  // Récupérer les sessions où user est user_id
+  const { data: sessionsAsUser, error: error1 } = await supabase
     .from('time_sessions')
     .select(`
       id,
+      user_id,
       friend_id,
       started_at,
       duration_seconds,
@@ -279,15 +402,45 @@ export const getActiveSessions = async (userId: string) => {
       )
     `)
     .eq('user_id', userId)
-    .eq('is_active', true)
-    .order('started_at', { ascending: false });
+    .eq('is_active', true);
 
-  if (error) {
-    console.error('Erreur récupération sessions actives:', error);
+  // Récupérer les sessions où user est friend_id
+  const { data: sessionsAsFriend, error: error2 } = await supabase
+    .from('time_sessions')
+    .select(`
+      id,
+      user_id,
+      friend_id,
+      started_at,
+      duration_seconds,
+      friend:profiles!time_sessions_user_id_fkey (
+        id,
+        username,
+        avatar_url
+      )
+    `)
+    .eq('friend_id', userId)
+    .eq('is_active', true);
+
+  if (error1 || error2) {
+    console.error('Erreur récupération sessions actives:', error1 || error2);
     return [];
   }
 
-  return sessions || [];
+  // Combiner et normaliser les résultats
+  const allSessions = [
+    ...(sessionsAsUser || []),
+    ...(sessionsAsFriend || []).map(s => ({
+      ...s,
+      friend_id: s.user_id, // Inverser pour cohérence
+      friend: s.friend,
+    }))
+  ];
+
+  // Trier par started_at décroissant
+  return allSessions.sort((a, b) => 
+    new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
+  );
 };
 
 /**
