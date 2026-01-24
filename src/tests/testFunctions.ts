@@ -62,7 +62,16 @@ vi.mock('../services/supabase', () => ({
       resetPasswordForEmail: vi.fn().mockResolvedValue({ error: null }),
       onAuthStateChange: vi.fn(),
     },
-    rpc: vi.fn().mockResolvedValue([]),
+    rpc: vi.fn((functionName: string, params?: any) => {
+      // Mock des fonctions RPC Supabase
+      if (functionName === 'get_nearby_friends') {
+        return Promise.resolve({ data: [], error: null });
+      }
+      if (functionName === 'end_stale_sessions') {
+        return Promise.resolve({ data: [], error: null });
+      }
+      return Promise.resolve({ data: [], error: null });
+    }),
   },
   checkConnection: vi.fn().mockResolvedValue(true),
 }));
@@ -345,6 +354,34 @@ export const getStatsForPeriod_Test = async (): Promise<number> => {
   return 1; // Succès: tous les cas passent
 };
 
+/**
+ * Test de la fonction getActiveSessions
+ * Récupère les sessions actuellement actives pour un utilisateur
+ * Retourne uniquement les sessions avec is_active = true
+ */
+export const getActiveSessions_Test = async (): Promise<number> => {
+  try {
+    const { getActiveSessions } = await import('../services/friendService');
+
+    // Cas 1: Récupération des sessions actives avec un ID utilisateur valide
+    const result1 = await getActiveSessions('valid-user-id');
+    if (!Array.isArray(result1)) {
+      return -1; // Devrait retourner un tableau
+    }
+
+    // Cas 2: Récupération des sessions actives avec un ID utilisateur vide
+    const result2 = await getActiveSessions('');
+    if (!Array.isArray(result2)) {
+      return -2; // Devrait retourner un tableau
+    }
+  } catch (error) {
+    console.error('getActiveSessions error:', error);
+    return -3; // Échec si erreur
+  }
+
+  return 1; // Succès: tous les cas passent
+};
+
 // ========================================
 // TESTS POUR authService.ts
 // ========================================
@@ -522,6 +559,42 @@ export const initLocationService_Test = async (): Promise<number> => {
 };
 
 /**
+ * Test de la fonction startLocationTracking
+ * Démarre le suivi de localisation en arrière-plan
+ * Configure le tracking GPS continu
+ */
+export const startLocationTracking_Test = async (): Promise<number> => {
+  try {
+    const { startLocationTracking } = await import('../services/locationService');
+
+    // Cas 1: Démarrage du tracking de localisation
+    await startLocationTracking();
+  } catch (error) {
+    return -1; // Échec si erreur
+  }
+
+  return 1; // Succès: tous les cas passent
+};
+
+/**
+ * Test de la fonction stopLocationTracking
+ * Arrête le suivi de localisation en arrière-plan
+ * Nettoie les ressources et arrête le nettoyage périodique
+ */
+export const stopLocationTracking_Test = async (): Promise<number> => {
+  try {
+    const { stopLocationTracking } = await import('../services/locationService');
+
+    // Cas 1: Arrêt du tracking de localisation
+    await stopLocationTracking();
+  } catch (error) {
+    return -1; // Échec si erreur
+  }
+
+  return 1; // Succès: tous les cas passent
+};
+
+/**
  * Test de la fonction getCurrentLocation
  * Obtient la position GPS actuelle de l'appareil
  * Utilise les APIs Expo Location pour récupérer les coordonnées
@@ -571,6 +644,31 @@ export const updateUserLocation_Test = async (): Promise<number> => {
 };
 
 /**
+ * Test de la fonction checkProximityWithFriends
+ * Vérifie la proximité avec les amis et gère les sessions automatiquement
+ * Utilise la formule Haversine côté serveur pour calculer les distances
+ */
+export const checkProximityWithFriends_Test = async (): Promise<number> => {
+  try {
+    const { checkProximityWithFriends } = await import('../services/locationService');
+
+    // Cas 1: Vérification de proximité avec des coordonnées valides (Paris)
+    await checkProximityWithFriends(48.8566, 2.3522);
+
+    // Cas 2: Vérification de proximité avec coordonnées extrêmes
+    await checkProximityWithFriends(90, 180); // Pôle Nord, limite longitude
+    await checkProximityWithFriends(-90, -180); // Pôle Sud, limite longitude
+
+    // Cas 3: Vérification de proximité avec coordonnées nulles
+    await checkProximityWithFriends(0, 0);
+  } catch (error) {
+    return -1; // Échec si erreur
+  }
+
+  return 1; // Succès: tous les cas passent
+};
+
+/**
  * Test de la fonction startTimeSession
  * Démarre une nouvelle session de temps avec un ami spécifique
  * Crée un enregistrement de session active dans la base de données
@@ -595,6 +693,7 @@ export const startTimeSession_Test = async (): Promise<number> => {
  * Test de la fonction endTimeSession
  * Termine une session de temps active en calculant la durée écoulée
  * Met à jour l'enregistrement de session avec l'heure de fin et la durée
+ * Note: La vérification des positions obsolètes se fait via checkProximityWithFriends
  */
 export const endTimeSession_Test = async (): Promise<number> => {
   try {
@@ -607,6 +706,29 @@ export const endTimeSession_Test = async (): Promise<number> => {
     await endTimeSession('');
   } catch (error) {
     return -1; // Échec si erreur
+  }
+
+  return 1; // Succès: tous les cas passent
+};
+
+/**
+ * Test de la fonction cleanupStaleSessions
+ * Nettoie les sessions avec positions GPS obsolètes
+ * Appelle la fonction SQL end_stale_sessions côté serveur
+ */
+export const cleanupStaleSessions_Test = async (): Promise<number> => {
+  try {
+    const { cleanupStaleSessions } = await import('../services/locationService');
+
+    // Cas 1: Nettoyage des sessions obsolètes
+    const result = await cleanupStaleSessions();
+    
+    // Devrait retourner un nombre (count de sessions nettoyées)
+    if (typeof result !== 'number') {
+      return -1;
+    }
+  } catch (error) {
+    return -2; // Échec si erreur
   }
 
   return 1; // Succès: tous les cas passent

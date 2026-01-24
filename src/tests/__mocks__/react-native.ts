@@ -1,11 +1,11 @@
 // Mock simple de React Native pour éviter les erreurs de parsing
 export const Platform = {
   OS: 'ios',
-  select: (obj) => obj.ios || obj.default,
+  select: (obj: any) => obj.ios || obj.default,
 };
 
 export const StyleSheet = {
-  create: (styles) => styles,
+  create: (styles: any) => styles,
 };
 
 export const View = 'View';
