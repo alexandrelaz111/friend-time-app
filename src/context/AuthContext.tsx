@@ -40,7 +40,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.log('🚀 Démarrage tracking...');
             await startLocationTracking();
             setIsLocationEnabled(true);
-            startPeriodicCleanup(5);
+            // Cleanup périodique rare: toutes les 10 minutes
+            // Le filtre client (validActiveSessions) gère la réactivité
+            startPeriodicCleanup(10);
             console.log('✅ AuthProvider initialisé');
           }
         } else {
@@ -74,8 +76,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (enabled) {
         await startLocationTracking();
         setIsLocationEnabled(true);
-        // Optionnel : nettoyage périodique
-        startPeriodicCleanup(5);
+        // Cleanup périodique rare: toutes les 10 minutes
+        // Le filtre client (validActiveSessions) gère la réactivité
+        startPeriodicCleanup(10);
       }
     }
 
@@ -106,8 +109,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (enabled) {
       await startLocationTracking();
       setIsLocationEnabled(true);
-      // Optionnel : nettoyage périodique
-      startPeriodicCleanup(5);
+      // Cleanup périodique rare: toutes les 10 minutes
+      // Le filtre client (validActiveSessions) gère la réactivité
+      startPeriodicCleanup(10);
       return true;
     }
     return false;

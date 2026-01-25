@@ -384,63 +384,36 @@ export const getStatsForPeriodLive = async (
 /**
  * Récupère les sessions actives en cours (architecture bidirectionnelle)
  * Retourne les sessions où l'utilisateur est soit user_id soit friend_id
+ * OPTIMISÉ: Durée calculée au serveur (EXTRACT EPOCH) = pas d'imprécision client
  */
 export const getActiveSessions = async (userId: string) => {
-  // Récupérer les sessions où user est user_id
-  const { data: sessionsAsUser, error: error1 } = await supabase
-    .from('time_sessions')
-    .select(`
-      id,
-      user_id,
-      friend_id,
-      started_at,
-      duration_seconds,
-      friend:profiles!time_sessions_friend_id_fkey (
-        id,
-        username,
-        avatar_url
-      )
-    `)
-    .eq('user_id', userId)
-    .eq('is_active', true);
+  // Utilise le RPC qui calcule la durée au moment du fetch (NOW() - started_at)
+  // Cela évite les requêtes supplémentaires et garantit la précision serveur
+  const { data, error } = await supabase.rpc('get_active_sessions_with_duration', {
+    p_user_id: userId,
+  });
 
-  // Récupérer les sessions où user est friend_id
-  const { data: sessionsAsFriend, error: error2 } = await supabase
-    .from('time_sessions')
-    .select(`
-      id,
-      user_id,
-      friend_id,
-      started_at,
-      duration_seconds,
-      friend:profiles!time_sessions_user_id_fkey (
-        id,
-        username,
-        avatar_url
-      )
-    `)
-    .eq('friend_id', userId)
-    .eq('is_active', true);
-
-  if (error1 || error2) {
-    console.error('Erreur récupération sessions actives:', error1 || error2);
+  if (error) {
+    console.error('Erreur récupération sessions actives:', error);
     return [];
   }
 
-  // Combiner et normaliser les résultats
-  const allSessions = [
-    ...(sessionsAsUser || []),
-    ...(sessionsAsFriend || []).map(s => ({
-      ...s,
-      friend_id: s.user_id, // Inverser pour cohérence
-      friend: s.friend,
-    }))
-  ];
-
-  // Trier par started_at décroissant
-  return allSessions.sort((a, b) => 
-    new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
-  );
+  // Normaliser les données retournées par le RPC
+  return (data || []).map((session: any) => ({
+    id: session.id,
+    user_id: session.user_id,
+    friend_id: session.friend_id_normalized, // RPC normalise le friend_id pour cohérence
+    started_at: session.started_at,
+    duration_seconds: session.duration_seconds, // ← CALCULÉ AU SERVEUR (precision ±1ms)
+    is_active: session.is_active,
+    user_last_position_at: session.user_last_position_at,
+    friend_last_position_at: session.friend_last_position_at,
+    friend: {
+      id: session.friend_id_normalized,
+      username: session.friend_username,
+      avatar_url: session.friend_avatar_url,
+    },
+  }));
 };
 
 /**

@@ -403,12 +403,12 @@ export const checkProximityWithFriends = async (
       return;
     }
 
-    // Fermeture: < 60m (hysteresis = marge de 10m)
+    // Fermeture: < 75m (hysteresis = marge de 25m) - AUGMENTÉE pour éviter oscillation
     const { data: nearbyFriendsForKeeping, error: errorKeeping } = await supabase.rpc('get_nearby_friends', {
       p_user_id: currentUserId,
       p_latitude: latitude,
       p_longitude: longitude,
-      p_threshold_meters: 60, // Seuil de fermeture (plus permissif)
+      p_threshold_meters: 75, // Seuil de fermeture (augmenté à 75m pour stabilité)
     });
 
     if (errorKeeping) {
@@ -417,7 +417,7 @@ export const checkProximityWithFriends = async (
     }
 
     console.log(`📊 Amis proches (< 50m) trouvés: ${nearbyFriends?.length || 0}`, nearbyFriends);
-    console.log(`📊 Amis à garder (< 60m) trouvés: ${nearbyFriendsForKeeping?.length || 0}`, nearbyFriendsForKeeping);
+    console.log(`📊 Amis à garder (< 75m) trouvés: ${nearbyFriendsForKeeping?.length || 0}`, nearbyFriendsForKeeping);
 
     // Récupère les sessions actives (bidirectionnelles: user_id OU friend_id)
     const { data: sessionsAsUser } = await supabase
@@ -456,20 +456,25 @@ export const checkProximityWithFriends = async (
 
     console.log(`🔑 Friend IDs sessions actives: [${Array.from(activeSessionFriendIds).join(', ')}]`);
     console.log(`🔑 Friend IDs proches (< 50m): [${Array.from(nearbyFriendIds).join(', ')}]`);
-    console.log(`🔑 Friend IDs à garder (< 60m): [${Array.from(keepSessionFriendIds).join(', ')}]`);
+    console.log(`🔑 Friend IDs à garder (< 75m): [${Array.from(keepSessionFriendIds).join(', ')}]`);
 
     // Démarrer de nouvelles sessions pour les amis nouvellement proches
+    const newSessionsFriendIds = new Set<string>();
     for (const friend of nearbyFriends || []) {
       if (!activeSessionFriendIds.has(friend.friend_id)) {
         await startTimeSession(friend.friend_id);
+        newSessionsFriendIds.add(friend.friend_id);
         console.log(`🎉 Session démarrée avec ${friend.username} (${Math.round(friend.distance)}m)`);
       }
     }
 
-    // Terminer les sessions pour les amis qui ne sont plus proches (> 60m)
+    // Terminer les sessions pour les amis qui ne sont plus proches (> 75m)
+    // GRACE PERIOD: Ne pas terminer les sessions qui viennent d'être créées
+    // (les positions pourraient ne pas être synchronisées immédiatement)
     for (const session of allActiveSessions || []) {
       const friendIdInSession = session.user_id === currentUserId ? session.friend_id : session.user_id;
-      if (!keepSessionFriendIds.has(friendIdInSession)) {
+      // Ignorer les sessions nouvellement créées - laisser le temps aux positions de se synchroniser
+      if (!newSessionsFriendIds.has(friendIdInSession) && !keepSessionFriendIds.has(friendIdInSession)) {
         await endTimeSession(session.id);
         console.log(`🛑 Session terminée avec ami ${friendIdInSession}`);
       }
@@ -597,8 +602,9 @@ export const cleanupStaleSessions = async (): Promise<number> => {
 
 /**
  * Démarre un nettoyage périodique des sessions obsolètes (optionnel)
- * Utile comme filet de sécurité pour attraper les cas edge
- * @param intervalMinutes Intervalle en minutes (défaut: 5 min)
+ * ARCHITECTURE: Filet de sécurité pour intégrité BDD, appelé toutes les 10-15 min
+ * La réactivité UI est gérée côté client par le filtre validActiveSessions
+ * @param intervalMinutes Intervalle en minutes (défaut: 5 min, mais normalement 10-15)
  */
 export const startPeriodicCleanup = (intervalMinutes: number = 5): void => {
   // Arrête l'intervalle existant si présent
