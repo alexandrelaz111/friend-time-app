@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { getFriendTimeStatsLive, getStatsForPeriodLive, getActiveSessions } from '../services/friendService';
+import { getFriendTimeStats, getStatsForPeriodLive, getActiveSessions } from '../services/friendService';
 import { FriendTimeStats } from '../types';
 import { normalizeFont } from '../utils/helpers';
 import { useTheme } from '../theme/colors';
@@ -26,6 +26,69 @@ export const HomeScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [baseStats, setBaseStats] = useState<FriendTimeStats[]>([]); // Stats de base (sans sessions actives)
   const [baseMonthlySeconds, setBaseMonthlySeconds] = useState(0); // Total du mois sans sessions actives
+
+  // Calcul memoized des durées des sessions actives
+  // Source unique de vérité: currentTime + activeSessions
+  // Garantit synchronisation parfaite avec les autres timers
+  const activeSessionDurations = useMemo(() => {
+    const nowTimestamp = currentTime.getTime();
+    const durations = new Map<string, number>();
+    
+    for (const session of activeSessions) {
+      const startTimestamp = new Date(session.started_at).getTime();
+      const elapsed = Math.floor((nowTimestamp - startTimestamp) / 1000);
+      durations.set(session.id, Math.max(0, elapsed));
+    }
+    
+    return durations;
+  }, [currentTime, activeSessions]);
+
+  // Stats mensuelles memoized (synchrone)
+  const monthlyTotalLive = useMemo(() => {
+    const now = currentTime;
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    let totalSeconds = 0;
+    const friendIds = new Set<string>();
+
+    for (const session of activeSessions) {
+      const startTime = new Date(session.started_at);
+      if (startTime >= startOfMonth && startTime <= endOfMonth) {
+        const elapsed = Math.floor((currentTime.getTime() - startTime.getTime()) / 1000);
+        totalSeconds += Math.max(0, elapsed);
+        friendIds.add(session.friend_id);
+      }
+    }
+
+    return {
+      seconds: baseMonthlySeconds + totalSeconds,
+      friends: friendIds.size,
+    };
+  }, [currentTime, activeSessions, baseMonthlySeconds]);
+
+  // Stats par ami memoized (synchrone)
+  const statsLive = useMemo(() => {
+    return baseStats.map(stat => {
+      const activeSessForFriend = activeSessions.filter(
+        s => s.friend_id === stat.friend_id
+      );
+
+      const activeDuration = activeSessForFriend.reduce((sum, session) => {
+        const startTime = new Date(session.started_at).getTime();
+        const elapsed = Math.floor((currentTime.getTime() - startTime) / 1000);
+        return sum + Math.max(0, elapsed);
+      }, 0);
+
+      const totalSeconds = stat.total_seconds + activeDuration;
+
+      return {
+        ...stat,
+        total_seconds: totalSeconds,
+        total_hours: Math.round((totalSeconds / 3600) * 10) / 10,
+      };
+    }).sort((a, b) => b.total_seconds - a.total_seconds);
+  }, [currentTime, activeSessions, baseStats]);
 
   // Calcule localement le temps des sessions actives du mois
   const calculateActiveSessionsTime = useCallback((sessions: any[], currentTime: Date) => {
@@ -49,27 +112,8 @@ export const HomeScreen: React.FC = () => {
     return { totalSeconds, friendsCount: friendIds.size };
   }, []);
 
-  // Recalcule les stats localement avec currentTime (sans requête BD)
-  const updateLiveStats = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      // Stats par ami EN TEMPS RÉEL (recalcul local)
-      const friendStats = await getFriendTimeStatsLive(user.id, currentTime, activeSessions);
-      setStats(friendStats);
-
-      // Stats mensuelles EN TEMPS RÉEL (recalcul local)
-      const activeTime = calculateActiveSessionsTime(activeSessions, currentTime);
-      setMonthlyTotal({
-        seconds: baseMonthlySeconds + activeTime.totalSeconds,
-        friends: activeTime.friendsCount, // On pourrait améliorer pour compter tous les amis
-      });
-    } catch (error) {
-      console.error('Erreur recalcul stats:', error);
-    }
-  }, [user, currentTime, activeSessions, baseMonthlySeconds, calculateActiveSessionsTime]);
-
-  const loadStats = async () => {
+  // Wrapper loadStats dans useCallback pour éviter les re-créations à chaque render
+  const loadStats = useCallback(async (time: Date = currentTime) => {
     if (!user) return;
 
     try {
@@ -78,22 +122,21 @@ export const HomeScreen: React.FC = () => {
       console.log('🔄 Sessions actives chargées:', sessions);
       setActiveSessions(sessions);
 
-      // Stats par ami de base
-      const friendStats = await getFriendTimeStatsLive(user.id, currentTime, sessions);
-      setStats(friendStats);
+      // Stats par ami de base (SANS sessions actives - données historiques PURES)
+      const friendStats = await getFriendTimeStats(user.id);
       setBaseStats(friendStats);
 
       // Stats du mois en cours (sessions terminées seulement)
-      const now = new Date();
+      const now = time;
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-      const periodStats = await getStatsForPeriodLive(user.id, startOfMonth, endOfMonth, currentTime, sessions);
+      const periodStats = await getStatsForPeriodLive(user.id, startOfMonth, endOfMonth, time, sessions);
       const baseSeconds = Math.round(periodStats.totalHours * 3600);
       setBaseMonthlySeconds(baseSeconds);
       
       // Calculer le temps des sessions actives et ajouter
-      const activeTime = calculateActiveSessionsTime(sessions, currentTime);
+      const activeTime = calculateActiveSessionsTime(sessions, time);
       setMonthlyTotal({
         seconds: baseSeconds + activeTime.totalSeconds,
         friends: periodStats.friendsCount,
@@ -103,42 +146,40 @@ export const HomeScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, currentTime, calculateActiveSessionsTime]);
 
   useFocusEffect(
     useCallback(() => {
-      loadStats();
-    }, [user])
+      loadStats(currentTime);
+    }, [user, currentTime])
   );
 
-  // Rafraîchissement automatique des sessions actives toutes les 5 secondes
+  // Timer unique centralisé - ULTRA-LÉGER
+  // Ne fait QUE mettre à jour currentTime
+  // Tous les calculs dérivent de currentTime via useMemo → synchronisation garantie
   useEffect(() => {
-    const interval = setInterval(async () => {
-      if (user) {
-        await loadStats();
-      }
-    }, 5000);
+    let tickCount = 0;
 
-    return () => clearInterval(interval);
-  }, [user]);
-
-  // Timer pour mettre à jour l'heure actuelle chaque seconde (pour calcul durée en temps réel)
-  useEffect(() => {
-    const timer = setInterval(() => {
+    const mainTimer = setInterval(() => {
+      // Mise à jour du temps UNIQUEMENT (1ms constant, même avec 1000 sessions)
       setCurrentTime(new Date());
+
+      // Recharge les stats tous les 5 ticks (5 secondes) EN ARRIÈRE-PLAN
+      // (sans await pour ne pas bloquer le timer)
+      tickCount++;
+      if (tickCount % 5 === 0 && user) {
+        loadStats(new Date()).catch(error => 
+          console.error('Erreur rechargement async stats:', error)
+        );
+      }
     }, 1000);
 
-    return () => clearInterval(timer);
-  }, []);
-
-  // Recalcule les stats chaque fois que currentTime ou activeSessions changent
-  useEffect(() => {
-    updateLiveStats();
-  }, [currentTime, activeSessions]);
+    return () => clearInterval(mainTimer);
+  }, [user, loadStats]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadStats();
+    await loadStats(currentTime);
     setRefreshing(false);
   };
 
@@ -168,7 +209,7 @@ export const HomeScreen: React.FC = () => {
       'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
       'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
     ];
-    return months[new Date().getMonth()];
+    return months[currentTime.getMonth()];
   };
 
   return (
@@ -215,7 +256,7 @@ export const HomeScreen: React.FC = () => {
                 <View style={[styles.pulseDot, { backgroundColor: colors.success }]} />
               </View>
               <Text style={[styles.activeSessionDuration, { color: colors.success }]}>
-                {formatDuration(calculateLiveDuration(session.started_at))}
+                {formatDuration(activeSessionDurations.get(session.id) || 0)}
               </Text>
               <Text style={[styles.activeSessionLabel, { color: colors.textSecondary }]}>
                 Temps passé ensemble
@@ -230,12 +271,12 @@ export const HomeScreen: React.FC = () => {
         <Text style={styles.summaryTitle}>{getCurrentMonth()} 2025</Text>
         <View style={styles.summaryStats}>
           <View style={styles.summaryStat}>
-            <Text style={styles.summaryValue}>{formatDuration(monthlyTotal.seconds || 0)}</Text>
+            <Text style={styles.summaryValue}>{formatDuration(monthlyTotalLive.seconds || 0)}</Text>
             <Text style={styles.summaryLabel}>passées avec des amis</Text>
           </View>
           <View style={[styles.summaryDivider, { backgroundColor: colors.primaryLight }]} />
           <View style={styles.summaryStat}>
-            <Text style={styles.summaryValue}>{monthlyTotal.friends}</Text>
+            <Text style={styles.summaryValue}>{monthlyTotalLive.friends}</Text>
             <Text style={styles.summaryLabel}>amis vus</Text>
           </View>
         </View>
@@ -249,7 +290,7 @@ export const HomeScreen: React.FC = () => {
           <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Chargement...</Text>
           </View>
-        ) : stats.length === 0 ? (
+        ) : statsLive.length === 0 ? (
           <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
             <Text style={[styles.emptyTitle, { color: colors.text }]}>Pas encore de données</Text>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
@@ -257,7 +298,7 @@ export const HomeScreen: React.FC = () => {
             </Text>
           </View>
         ) : (
-          stats.map((stat, index) => (
+          statsLive.map((stat, index) => (
             <View key={stat.friend_id} style={[styles.friendCard, { backgroundColor: colors.surface }]}>
               <View style={[styles.friendRank, { backgroundColor: colors.surfaceSecondary }]}>
                 <Text style={[styles.friendRankText, { color: colors.textSecondary }]}>#{index + 1}</Text>
