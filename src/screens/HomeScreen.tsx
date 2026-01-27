@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { getFriendTimeStatsLive, getStatsForPeriodLive, getActiveSessions } from '../services/friendService';
+import { getFriendTimeStats, getStatsForPeriodLive, getActiveSessions } from '../services/friendService';
 import { FriendTimeStats } from '../types';
 import { normalizeFont } from '../utils/helpers';
 import { useTheme } from '../theme/colors';
@@ -20,67 +20,147 @@ export const HomeScreen: React.FC = () => {
   const { colors } = useTheme();
   const [stats, setStats] = useState<FriendTimeStats[]>([]);
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [baseServerDurations, setBaseServerDurations] = useState<Record<string, number>>({});
+  const [fetchTime, setFetchTime] = useState(Date.now());
+  const [renderTrigger, setRenderTrigger] = useState(0);
+  const [serverTimestamp, setServerTimestamp] = useState(new Date());
+  const [monthlyRange, setMonthlyRange] = useState({ startOfMonth: new Date(), endOfMonth: new Date() });
   const [monthlyTotal, setMonthlyTotal] = useState({ seconds: 0, friends: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [baseStats, setBaseStats] = useState<FriendTimeStats[]>([]); // Stats de base (sans sessions actives)
   const [baseMonthlySeconds, setBaseMonthlySeconds] = useState(0); // Total du mois sans sessions actives
 
-  // Calcule localement le temps des sessions actives du mois
-  const calculateActiveSessionsTime = useCallback((sessions: any[], currentTime: Date) => {
-    const now = currentTime;
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  // Filtre intelligent: identifie les sessions valides basé sur la récence de la position
+  // ARCHITECTURE: Filtre côté client = RÉACTIF (instantané) + LÉGER
+  // NOTE: Utilise Date.now() au lieu de serverTimestamp pour ne pas déclencher de recalc tous les 5s
+  const validActiveSessions = useMemo(() => {
+    const nowTimestamp = Date.now();
+    const maxInactivityMs = 3 * 60 * 1000; // 3 minutes d'inactivité max
+    
+    return activeSessions.filter(session => {
+      // Cas 1: Pas de données de position du tout - session valide par défaut (données peuvent être en cours de synchronisation)
+      if (!session.user_last_position_at && !session.friend_last_position_at) {
+        return true;
+      }
+      
+      // Cas 2: Au moins une position est présente - vérifier sa récence
+      const userLastPositionAt = session.user_last_position_at 
+        ? new Date(session.user_last_position_at).getTime() 
+        : null;
+      
+      const friendLastPositionAt = session.friend_last_position_at 
+        ? new Date(session.friend_last_position_at).getTime() 
+        : null;
+      
+      // Si une position existe et est récente (< 3min), session valide
+      // Cela tolère le cas où une personne a fermé l'app mais l'autre est active
+      if (userLastPositionAt !== null) {
+        const userInactivityMs = nowTimestamp - userLastPositionAt;
+        if (userInactivityMs < maxInactivityMs) {
+          return true; // Position utilisateur récente = session valide
+        }
+      }
+      
+      if (friendLastPositionAt !== null) {
+        const friendInactivityMs = nowTimestamp - friendLastPositionAt;
+        if (friendInactivityMs < maxInactivityMs) {
+          return true; // Position ami récente = session valide
+        }
+      }
+      
+      // Aucune position récente trouvée
+      return false;
+    });
+  }, [activeSessions]); // ← Dépend SEULEMENT de activeSessions, pas de serverTimestamp
+
+  // Calcul memoized des durées des sessions VALIDES
+  // ARCHITECTURE: serverDuration (du RPC) + temps écoulé depuis fetch = source unique de vérité
+  // renderTrigger force les recalcs chaque seconde pour affichage fluide
+  // NOTE: fetchTime NOT in dependencies - Date.now() is called directly, not referenced as dependency
+  const activeSessionDurations = useMemo(() => {
+    const durations = new Map<string, number>();
+    const elapsedSinceFetch = Math.floor((Date.now() - fetchTime) / 1000);
+    
+    for (const session of validActiveSessions) {
+      // Source de vérité = serverDuration du RPC + temps réel écoulé depuis fetch
+      const serverDurationSeconds = baseServerDurations[session.id] || 0;
+      const displayDuration = Math.round(serverDurationSeconds + elapsedSinceFetch);
+      durations.set(session.id, displayDuration);
+    }
+    
+    return durations;
+  }, [validActiveSessions, baseServerDurations, renderTrigger]);
+
+  // Stats mensuelles memoized (synchrone) - utilise validActiveSessions filtrées
+  // ARCHITECTURE: serverDuration + temps réel écoulé depuis fetch
+  // renderTrigger force les recalcs chaque seconde pour affichage fluide
+  // NOTE: fetchTime NOT in dependencies - Date.now() is called directly, not referenced as dependency
+  const monthlyTotalLive = useMemo(() => {
+    const { startOfMonth, endOfMonth } = monthlyRange;
+    const elapsedSinceFetch = Math.floor((Date.now() - fetchTime) / 1000);
 
     let totalSeconds = 0;
     const friendIds = new Set<string>();
 
-    for (const session of sessions) {
+    for (const session of validActiveSessions) {
       const startTime = new Date(session.started_at);
-      // Vérifier si la session active est dans le mois
       if (startTime >= startOfMonth && startTime <= endOfMonth) {
-        const elapsed = Math.floor((currentTime.getTime() - startTime.getTime()) / 1000);
-        totalSeconds += Math.max(0, elapsed);
+        // Source unique: serverDuration + temps écoulé depuis fetch
+        const serverDurationSeconds = baseServerDurations[session.id] || 0;
+        const displayDuration = Math.round(serverDurationSeconds + elapsedSinceFetch);
+        totalSeconds += displayDuration;
         friendIds.add(session.friend_id);
       }
     }
 
-    return { totalSeconds, friendsCount: friendIds.size };
-  }, []);
+    return {
+      seconds: baseMonthlySeconds + totalSeconds,
+      friends: friendIds.size,
+    };
+  }, [monthlyRange, validActiveSessions, baseMonthlySeconds, baseServerDurations, renderTrigger]);
 
-  // Recalcule les stats localement avec currentTime (sans requête BD)
-  const updateLiveStats = useCallback(async () => {
-    if (!user) return;
+  // Stats par ami memoized (synchrone) - utilise validActiveSessions filtrées
+  // ARCHITECTURE: serverDuration + temps réel écoulé depuis fetch
+  // renderTrigger force les recalcs chaque seconde pour affichage fluide
+  // NOTE: fetchTime NOT in dependencies - Date.now() is called directly, not referenced as dependency
+  const statsLive = useMemo(() => {
+    const elapsedSinceFetch = Math.floor((Date.now() - fetchTime) / 1000);
+    
+    return baseStats.map(stat => {
+      const activeSessForFriend = validActiveSessions.filter(
+        s => s.friend_id === stat.friend_id
+      );
 
-    try {
-      // Stats par ami EN TEMPS RÉEL (recalcul local)
-      const friendStats = await getFriendTimeStatsLive(user.id, currentTime, activeSessions);
-      setStats(friendStats);
+      const activeDuration = activeSessForFriend.reduce((sum, session) => {
+        // Source unique: serverDuration + temps écoulé depuis fetch
+        const serverDurationSeconds = baseServerDurations[session.id] || 0;
+        const displayDuration = Math.round(serverDurationSeconds + elapsedSinceFetch);
+        return sum + displayDuration;
+      }, 0);
 
-      // Stats mensuelles EN TEMPS RÉEL (recalcul local)
-      const activeTime = calculateActiveSessionsTime(activeSessions, currentTime);
-      setMonthlyTotal({
-        seconds: baseMonthlySeconds + activeTime.totalSeconds,
-        friends: activeTime.friendsCount, // On pourrait améliorer pour compter tous les amis
-      });
-    } catch (error) {
-      console.error('Erreur recalcul stats:', error);
-    }
-  }, [user, currentTime, activeSessions, baseMonthlySeconds, calculateActiveSessionsTime]);
+      const totalSeconds = stat.total_seconds + activeDuration;
 
-  const loadStats = async () => {
+      return {
+        ...stat,
+        total_seconds: totalSeconds,
+        total_hours: Math.round((totalSeconds / 3600) * 10) / 10,
+      };
+    }).sort((a, b) => b.total_seconds - a.total_seconds);
+  }, [validActiveSessions, baseStats, baseServerDurations, renderTrigger]);
+
+  // Wrapper loadStats dans useCallback pour éviter les re-créations
+  // ARCHITECTURE: Fetch données + store baseServerDurations + store fetchTime
+  const loadStats = useCallback(async () => {
     if (!user) return;
 
     try {
       // Sessions actives
       const sessions = await getActiveSessions(user.id);
-      console.log('🔄 Sessions actives chargées:', sessions);
       setActiveSessions(sessions);
 
-      // Stats par ami de base
-      const friendStats = await getFriendTimeStatsLive(user.id, currentTime, sessions);
-      setStats(friendStats);
+      // Stats par ami de base (SANS sessions actives - données historiques PURES)
+      const friendStats = await getFriendTimeStats(user.id);
       setBaseStats(friendStats);
 
       // Stats du mois en cours (sessions terminées seulement)
@@ -88,53 +168,81 @@ export const HomeScreen: React.FC = () => {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-      const periodStats = await getStatsForPeriodLive(user.id, startOfMonth, endOfMonth, currentTime, sessions);
+      const periodStats = await getStatsForPeriodLive(user.id, startOfMonth, endOfMonth, now, sessions);
       const baseSeconds = Math.round(periodStats.totalHours * 3600);
       setBaseMonthlySeconds(baseSeconds);
       
-      // Calculer le temps des sessions actives et ajouter
-      const activeTime = calculateActiveSessionsTime(sessions, currentTime);
-      setMonthlyTotal({
-        seconds: baseSeconds + activeTime.totalSeconds,
-        friends: periodStats.friendsCount,
-      });
+      // DÉCOUPLEZ: Stocker les dates du mois séparément
+      setMonthlyRange({ startOfMonth, endOfMonth });
+      
+      // ARCHITECTURE: Stocker les durées serveur et le timestamp du fetch
+      const durations: Record<string, number> = {};
+      for (const session of sessions) {
+        durations[session.id] = session.duration_seconds || 0;
+      }
+      setBaseServerDurations(durations);
+      setFetchTime(Date.now());
+      setServerTimestamp(new Date());
     } catch (error) {
       console.error('Erreur chargement stats:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useFocusEffect(
     useCallback(() => {
       loadStats();
-    }, [user])
+    }, [loadStats])
   );
 
-  // Rafraîchissement automatique des sessions actives toutes les 5 secondes
+  // TIMER EFFECT: Drift-corrected timer for precise 1-second intervals
+  // Uses setTimeout with delay recalculation to stay synchronized to second boundaries
+  // This ensures smooth real-time display while maintaining the single source of truth
+  // Formula: display = serverDuration + (Date.now() - fetchTime) / 1000
   useEffect(() => {
-    const interval = setInterval(async () => {
-      if (user) {
-        await loadStats();
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [user]);
-
-  // Timer pour mettre à jour l'heure actuelle chaque seconde (pour calcul durée en temps réel)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
-    return () => clearInterval(timer);
+    let lastTickTime = Date.now();
+    let timeoutId: NodeJS.Timeout | null = null;
+    
+    const scheduleNextTick = () => {
+      const now = Date.now();
+      const elapsed = now - lastTickTime;
+      // Calculate delay to next second boundary: how much time until next exact second
+      const delay = Math.max(0, 1000 - (elapsed % 1000));
+      
+      timeoutId = setTimeout(() => {
+        setRenderTrigger(prev => (prev + 1) % Number.MAX_SAFE_INTEGER);
+        lastTickTime = Date.now();  // Capture exact moment of tick
+        scheduleNextTick();
+      }, delay);
+    };
+    
+    scheduleNextTick();
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, []);
 
-  // Recalcule les stats chaque fois que currentTime ou activeSessions changent
+  // RECHARGEMENT EFFECT: Separate 5-second data refresh cycle with rate limiting
   useEffect(() => {
-    updateLiveStats();
-  }, [currentTime, activeSessions]);
+    let isLoading = false;
+    
+    const interval = setInterval(async () => {
+      if (!isLoading && user) {
+        isLoading = true;
+        try {
+          await loadStats();
+        } catch (error) {
+          console.error('Erreur rechargement async stats:', error);
+        } finally {
+          isLoading = false;
+        }
+      }
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [user, loadStats]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -145,7 +253,7 @@ export const HomeScreen: React.FC = () => {
   const formatDuration = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);  // ← Round to integer
 
     if (hours > 0) {
       return `${hours}h ${minutes}min ${secs}s`;
@@ -156,19 +264,12 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
-  // Calcule la durée en temps réel depuis started_at (côté client)
-  const calculateLiveDuration = (startedAt: string): number => {
-    const start = new Date(startedAt);
-    const diff = Math.floor((currentTime.getTime() - start.getTime()) / 1000);
-    return Math.max(0, diff); // Évite les valeurs négatives
-  };
-
   const getCurrentMonth = (): string => {
     const months = [
       'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
       'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
     ];
-    return months[new Date().getMonth()];
+    return months[serverTimestamp.getMonth()];
   };
 
   return (
@@ -215,7 +316,7 @@ export const HomeScreen: React.FC = () => {
                 <View style={[styles.pulseDot, { backgroundColor: colors.success }]} />
               </View>
               <Text style={[styles.activeSessionDuration, { color: colors.success }]}>
-                {formatDuration(calculateLiveDuration(session.started_at))}
+                {formatDuration(activeSessionDurations.get(session.id) || 0)}
               </Text>
               <Text style={[styles.activeSessionLabel, { color: colors.textSecondary }]}>
                 Temps passé ensemble
@@ -230,12 +331,12 @@ export const HomeScreen: React.FC = () => {
         <Text style={styles.summaryTitle}>{getCurrentMonth()} 2025</Text>
         <View style={styles.summaryStats}>
           <View style={styles.summaryStat}>
-            <Text style={styles.summaryValue}>{formatDuration(monthlyTotal.seconds || 0)}</Text>
+            <Text style={styles.summaryValue}>{formatDuration(monthlyTotalLive.seconds || 0)}</Text>
             <Text style={styles.summaryLabel}>passées avec des amis</Text>
           </View>
           <View style={[styles.summaryDivider, { backgroundColor: colors.primaryLight }]} />
           <View style={styles.summaryStat}>
-            <Text style={styles.summaryValue}>{monthlyTotal.friends}</Text>
+            <Text style={styles.summaryValue}>{monthlyTotalLive.friends}</Text>
             <Text style={styles.summaryLabel}>amis vus</Text>
           </View>
         </View>
@@ -249,7 +350,7 @@ export const HomeScreen: React.FC = () => {
           <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Chargement...</Text>
           </View>
-        ) : stats.length === 0 ? (
+        ) : statsLive.length === 0 ? (
           <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
             <Text style={[styles.emptyTitle, { color: colors.text }]}>Pas encore de données</Text>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
@@ -257,7 +358,7 @@ export const HomeScreen: React.FC = () => {
             </Text>
           </View>
         ) : (
-          stats.map((stat, index) => (
+          statsLive.map((stat, index) => (
             <View key={stat.friend_id} style={[styles.friendCard, { backgroundColor: colors.surface }]}>
               <View style={[styles.friendRank, { backgroundColor: colors.surfaceSecondary }]}>
                 <Text style={[styles.friendRankText, { color: colors.textSecondary }]}>#{index + 1}</Text>

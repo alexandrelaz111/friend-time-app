@@ -1,9 +1,0 @@
--- ============================================
--- ⚠️  FICHIER DÉPLACÉ ⚠️
--- ============================================
--- 
--- Ce fichier a été déplacé vers: database/schema.sql
--- 
--- Pour reconstruire la database, voir database/README.md
--- 
--- ============================================
