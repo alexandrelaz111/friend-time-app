@@ -11,6 +11,17 @@ export const signUp = async (
   username: string
 ): Promise<{ user: User | null; error: string | null }> => {
   try {
+    // Vérifie si l'email est déjà utilisé
+    const { data: existingEmail } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('email', email.toLowerCase())
+      .single();
+
+    if (existingEmail) {
+      return { user: null, error: 'Un compte existe déjà avec cet email' };
+    }
+
     // Vérifie si le username est déjà pris
     const { data: existingUser } = await supabase
       .from('profiles')
