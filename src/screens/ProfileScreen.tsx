@@ -4,15 +4,19 @@ import {
   View, Text, StyleSheet, Pressable, Alert, ScrollView, Switch,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { MapPin, MapPinOff, Bell, ChevronRight, LogOut } from 'lucide-react-native';
+import { MapPin, MapPinOff, Bell, ChevronRight, LogOut, Trash2, Download } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { getFriends, getFriendTimeStats } from '../services/friendService';
+import { exportUserData } from '../services/authService';
+import { useTranslation } from 'react-i18next';
 import { THEME, formatHours } from '../theme';
 import { Avatar } from '../components/Avatar';
 
 export const ProfileScreen: React.FC = () => {
-  const { user, signOut, isLocationEnabled, enableLocation, disableLocation } = useAuth();
+  const { t } = useTranslation();
+  const { user, signOut, deleteAccount, isLocationEnabled, enableLocation, disableLocation } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [profileStats, setProfileStats] = useState({ totalHours: 0, friendsCount: 0, sessionsCount: 0 });
 
   const loadProfileStats = async () => {
@@ -41,31 +45,76 @@ export const ProfileScreen: React.FC = () => {
       const success = await enableLocation();
       if (!success) {
         Alert.alert(
-          'Permission requise',
-          "Autorise l'acces a la localisation dans les parametres de ton telephone."
+          t('profile.permissionRequired'),
+          t('profile.permissionRequiredText')
         );
       }
     } else {
       Alert.alert(
-        'Desactiver le tracking',
-        'Tu ne pourras plus mesurer le temps passe avec tes amis. Continuer ?',
+        t('profile.disableTracking'),
+        t('profile.disableTrackingText'),
         [
-          { text: 'Annuler', style: 'cancel' },
-          { text: 'Desactiver', style: 'destructive', onPress: disableLocation },
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('profile.disable'), style: 'destructive', onPress: disableLocation },
         ]
       );
     }
   };
 
   const handleSignOut = () => {
-    Alert.alert('Deconnexion', 'Tu es sur de vouloir te deconnecter ?', [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('profile.signOutConfirm'), t('profile.signOutConfirmText'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Deconnecter',
+        text: t('profile.signOutConfirm'),
         style: 'destructive',
         onPress: async () => { setLoggingOut(true); await signOut(); },
       },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      t('profile.deleteAccount'),
+      t('profile.deleteAccountConfirmText'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('profile.deleteAccount'),
+          style: 'destructive',
+          onPress: () => {
+            // Double confirmation
+            Alert.alert(
+              t('profile.deleteAccountFinal'),
+              t('profile.deleteAccountFinalText'),
+              [
+                { text: t('common.cancel'), style: 'cancel' },
+                {
+                  text: t('profile.deleteConfirm'),
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeleting(true);
+                    const { error } = await deleteAccount();
+                    if (error) {
+                      setDeleting(false);
+                      Alert.alert(t('common.error'), error);
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
+
+  const handleExportData = async () => {
+    const { data, error } = await exportUserData();
+    if (error) {
+      Alert.alert(t('common.error'), error);
+      return;
+    }
+    Alert.alert(t('profile.dataExported'), t('profile.dataExportedText'));
   };
 
   return (
@@ -79,23 +128,23 @@ export const ProfileScreen: React.FC = () => {
         <View style={s.statsRow}>
           <View style={s.statCol}>
             <Text style={[s.statValue, { color: THEME.color.ember }]}>{formatHours(profileStats.totalHours)}</Text>
-            <Text style={s.statLabel}>total</Text>
+            <Text style={s.statLabel}>{t('profile.total')}</Text>
           </View>
           <View style={s.statDivider} />
           <View style={s.statCol}>
             <Text style={s.statValue}>{profileStats.friendsCount}</Text>
-            <Text style={s.statLabel}>{profileStats.friendsCount === 1 ? 'ami' : 'amis'}</Text>
+            <Text style={s.statLabel}>{profileStats.friendsCount === 1 ? t('profile.friend') : t('profile.friends')}</Text>
           </View>
           <View style={s.statDivider} />
           <View style={s.statCol}>
             <Text style={s.statValue}>{profileStats.sessionsCount}</Text>
-            <Text style={s.statLabel}>sessions</Text>
+            <Text style={s.statLabel}>{t('profile.sessions')}</Text>
           </View>
         </View>
       </View>
 
       {/* Parametres */}
-      <Text style={s.sectionEyebrow}>Parametres</Text>
+      <Text style={s.sectionEyebrow}>{t('profile.settings')}</Text>
       <View style={[s.settingsGroup, THEME.shadow.sm]}>
         <View style={s.settingRow}>
           <View style={[s.settingIcon, {
@@ -106,8 +155,8 @@ export const ProfileScreen: React.FC = () => {
               : <MapPinOff size={18} color={THEME.color.tomato} strokeWidth={1.75} />}
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.settingLabel}>Tracking de localisation</Text>
-            <Text style={s.settingDesc}>Mesure auto du temps avec tes amis</Text>
+            <Text style={s.settingLabel}>{t('profile.locationTracking')}</Text>
+            <Text style={s.settingDesc}>{t('profile.locationTrackingDesc')}</Text>
           </View>
           <Switch
             value={isLocationEnabled}
@@ -125,8 +174,8 @@ export const ProfileScreen: React.FC = () => {
             <MapPin size={18} color={THEME.color.fg2} strokeWidth={1.75} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.settingLabel}>Distance de proximite</Text>
-            <Text style={s.settingDesc}>50 metres</Text>
+            <Text style={s.settingLabel}>{t('profile.proximityDistance')}</Text>
+            <Text style={s.settingDesc}>{t('profile.proximityDistanceValue')}</Text>
           </View>
           <ChevronRight size={18} color={THEME.color.fg3} strokeWidth={1.75} />
         </Pressable>
@@ -138,20 +187,19 @@ export const ProfileScreen: React.FC = () => {
             <Bell size={18} color={THEME.color.fg2} strokeWidth={1.75} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.settingLabel}>Notifications</Text>
-            <Text style={s.settingDesc}>Toutes activees</Text>
+            <Text style={s.settingLabel}>{t('profile.notifications')}</Text>
+            <Text style={s.settingDesc}>{t('profile.notificationsValue')}</Text>
           </View>
           <ChevronRight size={18} color={THEME.color.fg3} strokeWidth={1.75} />
         </Pressable>
       </View>
 
       {/* A propos */}
-      <Text style={s.sectionEyebrow}>A propos</Text>
+      <Text style={s.sectionEyebrow}>{t('profile.about')}</Text>
       <View style={s.infoCard}>
-        <Text style={s.infoTitle}>Vie privee d'abord</Text>
+        <Text style={s.infoTitle}>{t('profile.privacyTitle')}</Text>
         <Text style={s.infoText}>
-          Ta position exacte n'est jamais partagee. Seule la proximite avec tes amis est mesuree,
-          et seulement entre vous.
+          {t('profile.privacyText')}
         </Text>
       </View>
 
@@ -162,8 +210,29 @@ export const ProfileScreen: React.FC = () => {
         style={({ pressed }) => [s.signOut, pressed && { opacity: 0.7 }]}
       >
         <LogOut size={18} color={THEME.color.tomato} strokeWidth={1.75} />
-        <Text style={s.signOutText}>{loggingOut ? 'Deconnexion...' : 'Se deconnecter'}</Text>
+        <Text style={s.signOutText}>{loggingOut ? t('profile.signingOut') : t('profile.signOut')}</Text>
       </Pressable>
+
+      {/* Données & compte */}
+      <Text style={s.sectionEyebrow}>{t('profile.dataAndAccount')}</Text>
+      <Pressable
+        onPress={handleExportData}
+        style={({ pressed }) => [s.dataRow, pressed && { opacity: 0.7 }]}
+      >
+        <Download size={18} color={THEME.color.sky} strokeWidth={1.75} />
+        <Text style={s.dataRowText}>{t('profile.exportData')}</Text>
+      </Pressable>
+      <Pressable
+        onPress={handleDeleteAccount}
+        disabled={deleting}
+        style={({ pressed }) => [s.dataRow, pressed && { opacity: 0.7 }]}
+      >
+        <Trash2 size={18} color={THEME.color.tomato} strokeWidth={1.75} />
+        <Text style={[s.dataRowText, { color: THEME.color.tomato }]}>
+          {deleting ? t('profile.deleting') : t('profile.deleteAccount')}
+        </Text>
+      </Pressable>
+
       <Text style={s.version}>FriendTime v1.0.0</Text>
     </ScrollView>
   );
@@ -294,9 +363,21 @@ const s = StyleSheet.create({
     fontFamily: THEME.font.bodyBold,
     color: THEME.color.tomato,
   },
+  dataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    marginTop: 8,
+  },
+  dataRowText: {
+    fontSize: 14,
+    fontFamily: THEME.font.bodySemibold,
+    color: THEME.color.sky,
+  },
   version: {
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 16,
     fontSize: 11,
     fontFamily: THEME.font.body,
     color: THEME.color.fg3,

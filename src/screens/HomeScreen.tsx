@@ -6,6 +6,7 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MapPinOff, Sparkles } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { getFriendTimeStats, getStatsForPeriod, getFriendSessions, computeStreak } from '../services/friendService';
 import { FriendTimeStats, RootStackParamList } from '../types';
@@ -15,51 +16,53 @@ import { FriendRow } from '../components/FriendRow';
 import { StatusPill } from '../components/StatusPill';
 
 // Génère des insights fun et personnalisés
-const generateInsights = (stats: FriendTimeStats[], monthlyTotal: { hours: number; friends: number }): string[] => {
+const generateInsights = (stats: FriendTimeStats[], monthlyTotal: { hours: number; friends: number }, t: (key: string, opts?: Record<string, any>) => string): string[] => {
   const insights: string[] = [];
   if (stats.length === 0) return insights;
 
-  const months = ['janvier','fevrier','mars','avril','mai','juin','juillet','aout','septembre','octobre','novembre','decembre'];
-  const currentMonth = months[new Date().getMonth()];
+  const currentMonth = t(`months.${new Date().getMonth()}`);
 
   // Top ami
   const top = stats[0];
   if (top && top.total_hours > 0) {
     const h = formatHours(top.total_hours);
-    insights.push(`Tu as passe ${h} avec ${top.friend.username} en ${currentMonth} — c'est ton #1 !`);
+    insights.push(t('insights.topFriend', { hours: h, name: top.friend.username, month: currentMonth }));
   }
 
   // Lieu prefere du top ami
   if (top?.last_place_emoji && top?.last_place_name) {
-    insights.push(`${top.last_place_emoji} Dernier spot avec ${top.friend.username} : ${top.last_place_name}${top.last_city ? ` a ${top.last_city}` : ''}`);
+    const text = top.last_city
+      ? t('insights.lastSpotCity', { name: top.friend.username, place: top.last_place_name, city: top.last_city })
+      : t('insights.lastSpot', { name: top.friend.username, place: top.last_place_name });
+    insights.push(`${top.last_place_emoji} ${text}`);
   }
 
   // Nombre de sessions total
   const totalSessions = stats.reduce((sum, s) => sum + s.sessions_count, 0);
   if (totalSessions > 0) {
-    insights.push(`${totalSessions} moment${totalSessions > 1 ? 's' : ''} partage${totalSessions > 1 ? 's' : ''} ce mois — chaque minute compte`);
+    insights.push(t(totalSessions > 1 ? 'insights.moments_plural' : 'insights.moments', { count: totalSessions }));
   }
 
   // Comparaison fun du temps
   if (monthlyTotal.hours >= 1) {
     const movies = Math.floor(monthlyTotal.hours / 1.5);
     if (movies >= 1) {
-      insights.push(`${formatHours(monthlyTotal.hours)} ensemble ce mois, soit ${movies} film${movies > 1 ? 's' : ''} au cine`);
+      insights.push(t(movies > 1 ? 'insights.movieComparison_plural' : 'insights.movieComparison', { hours: formatHours(monthlyTotal.hours), count: movies }));
     }
   }
 
   // Plusieurs amis vus
   if (monthlyTotal.friends > 1) {
-    insights.push(`${monthlyTotal.friends} amis vus en ${currentMonth} — tu geres`);
+    insights.push(t('insights.multipleFriends', { count: monthlyTotal.friends, month: currentMonth }));
   }
 
   // Si vu recemment
   if (top?.last_seen) {
     const daysAgo = Math.floor((Date.now() - new Date(top.last_seen).getTime()) / (1000 * 60 * 60 * 24));
     if (daysAgo === 0) {
-      insights.push(`Tu as vu ${top.friend.username} aujourd'hui — belle journee`);
+      insights.push(t('insights.seenToday', { name: top.friend.username }));
     } else if (daysAgo === 1) {
-      insights.push(`Tu as vu ${top.friend.username} hier — a quand la prochaine ?`);
+      insights.push(t('insights.seenYesterday', { name: top.friend.username }));
     }
   }
 
@@ -67,6 +70,7 @@ const generateInsights = (stats: FriendTimeStats[], monthlyTotal: { hours: numbe
 };
 
 export const HomeScreen: React.FC = () => {
+  const { t } = useTranslation();
   const { user, isLocationEnabled, enableLocation } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [stats, setStats] = useState<FriendTimeStats[]>([]);
@@ -109,8 +113,7 @@ export const HomeScreen: React.FC = () => {
   };
 
   const getCurrentMonth = () => {
-    const months = ['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
-    return `${months[new Date().getMonth()]} ${new Date().getFullYear()}`;
+    return `${t(`months.${new Date().getMonth()}`)} ${new Date().getFullYear()}`;
   };
 
   return (
@@ -124,10 +127,10 @@ export const HomeScreen: React.FC = () => {
       {/* Header */}
       <View style={s.header}>
         <Text style={s.greeting}>
-          Salut <Text style={s.greetingName}>{user?.username}</Text>
+          {t('home.greeting')} <Text style={s.greetingName}>{user?.username}</Text>
         </Text>
         <StatusPill tone={isLocationEnabled ? 'on' : 'off'}>
-          {isLocationEnabled ? 'Tracking actif' : 'Tracking inactif'}
+          {isLocationEnabled ? t('home.trackingOn') : t('home.trackingOff')}
         </StatusPill>
       </View>
 
@@ -138,10 +141,10 @@ export const HomeScreen: React.FC = () => {
             <MapPinOff size={20} color="#FFFFFF" strokeWidth={1.75} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.alertTitle}>Localisation desactivee</Text>
-            <Text style={s.alertText}>Active-la pour mesurer le temps avec tes amis</Text>
+            <Text style={s.alertTitle}>{t('home.locationDisabled')}</Text>
+            <Text style={s.alertText}>{t('home.locationDisabledText')}</Text>
           </View>
-          <Text style={s.alertCta}>Activer</Text>
+          <Text style={s.alertCta}>{t('home.enable')}</Text>
         </Pressable>
       )}
 
@@ -157,9 +160,9 @@ export const HomeScreen: React.FC = () => {
         <View style={s.insightsSection}>
           <View style={s.insightsHeader}>
             <Sparkles size={14} color={THEME.color.honey} strokeWidth={2} />
-            <Text style={s.insightsTitle}>En bref</Text>
+            <Text style={s.insightsTitle}>{t('insights.title')}</Text>
           </View>
-          {generateInsights(stats, monthlyTotal).slice(0, 3).map((text, i) => (
+          {generateInsights(stats, monthlyTotal, t).slice(0, 3).map((text, i) => (
             <View key={i} style={s.insightRow}>
               <View style={s.insightDot} />
               <Text style={s.insightText}>{text}</Text>
@@ -170,19 +173,19 @@ export const HomeScreen: React.FC = () => {
 
       {/* Classement */}
       <View style={s.sectionHeader}>
-        <Text style={s.sectionTitle}>Temps par ami</Text>
-        <Text style={s.sectionEyebrow}>Ce mois</Text>
+        <Text style={s.sectionTitle}>{t('home.timePerFriend')}</Text>
+        <Text style={s.sectionEyebrow}>{t('home.thisMonth')}</Text>
       </View>
 
       {loading ? (
         <View style={s.empty}>
-          <Text style={s.emptyText}>Chargement...</Text>
+          <Text style={s.emptyText}>{t('home.loading')}</Text>
         </View>
       ) : stats.length === 0 ? (
         <View style={s.empty}>
-          <Text style={s.emptyTitle}>Pas encore de donnees</Text>
+          <Text style={s.emptyTitle}>{t('home.noData')}</Text>
           <Text style={s.emptyText}>
-            Ajoute des amis et passe du temps avec eux pour voir tes statistiques.
+            {t('home.noDataText')}
           </Text>
         </View>
       ) : (
@@ -195,7 +198,7 @@ export const HomeScreen: React.FC = () => {
               avatarUrl={stat.friend.avatar_url}
               streak={streaks[stat.friend_id]}
               sessions={stat.sessions_count}
-              lastSeen={formatRelativeDate(stat.last_seen)}
+              lastSeen={formatRelativeDate(stat.last_seen, t)}
               time={formatHours(stat.total_hours)}
               lastPlaceEmoji={stat.last_place_emoji}
               lastPlaceName={stat.last_place_name}

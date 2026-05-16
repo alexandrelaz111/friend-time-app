@@ -2,6 +2,7 @@
 // Ligne d'ami — utilisee par HomeScreen (classement) et FriendsScreen (liste).
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { THEME } from '../theme';
 import { Avatar } from './Avatar';
 import { StatusPill } from './StatusPill';
@@ -28,8 +29,9 @@ export const FriendRow: React.FC<FriendRowProps> = ({
   lastPlaceEmoji, lastPlaceName, lastCity,
   status, onPress, onLongPress,
 }) => {
+  const { t } = useTranslation();
   const meta = [
-    sessions != null ? `${sessions} session${sessions > 1 ? 's' : ''}` : null,
+    sessions != null ? (sessions === 1 ? t('common.sessions_one', { count: sessions }) : t('common.sessions_other', { count: sessions })) : null,
     lastSeen || null,
   ].filter(Boolean).join(' · ');
 

@@ -185,6 +185,65 @@ export const updateProfile = async (
 };
 
 /**
+ * Suppression du compte utilisateur et de toutes ses données
+ */
+export const deleteAccount = async (): Promise<{ error: string | null }> => {
+  try {
+    await stopLocationTracking();
+    setCurrentUserId(null);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return { error: 'Non connecté' };
+
+    const userId = session.user.id;
+
+    // Supprimer les données (respecter les FK)
+    await supabase.from('time_sessions').delete().or(`user_id.eq.${userId},friend_id.eq.${userId}`);
+    await supabase.from('monthly_stats').delete().eq('user_id', userId);
+    await supabase.from('user_locations').delete().eq('user_id', userId);
+    await supabase.from('friendships').delete().or(`user_id.eq.${userId},friend_id.eq.${userId}`);
+    await supabase.from('profiles').delete().eq('id', userId);
+
+    await supabase.auth.signOut();
+    return { error: null };
+  } catch (err: any) {
+    return { error: err.message };
+  }
+};
+
+/**
+ * Exporte toutes les données de l'utilisateur (RGPD)
+ */
+export const exportUserData = async (): Promise<{ data: any; error: string | null }> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return { data: null, error: 'Non connecté' };
+
+    const userId = session.user.id;
+
+    const [profile, friendships, sessions, locations] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', userId).single(),
+      supabase.from('friendships').select('*').or(`user_id.eq.${userId},friend_id.eq.${userId}`),
+      supabase.from('time_sessions').select('*').or(`user_id.eq.${userId},friend_id.eq.${userId}`),
+      supabase.from('user_locations').select('*').eq('user_id', userId),
+    ]);
+
+    return {
+      data: {
+        exported_at: new Date().toISOString(),
+        profile: profile.data,
+        friendships: friendships.data,
+        time_sessions: sessions.data,
+        locations: locations.data,
+      },
+      error: null,
+    };
+  } catch (err: any) {
+    return { data: null, error: err.message };
+  }
+};
+
+/**
  * Réinitialisation du mot de passe
  */
 export const resetPassword = async (

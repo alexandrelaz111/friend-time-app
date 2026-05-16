@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User } from '../types';
-import { getCurrentSession, onAuthStateChange, signIn, signOut, signUp } from '../services/authService';
+import { getCurrentSession, onAuthStateChange, signIn, signOut, signUp, deleteAccount } from '../services/authService';
 import { initLocationService, startLocationTracking, stopLocationTracking } from '../services/locationService';
 
 interface AuthContextType {
@@ -10,6 +10,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, username: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ error: string | null }>;
   enableLocation: () => Promise<boolean>;
   disableLocation: () => Promise<void>;
 }
@@ -83,6 +84,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(null);
   };
 
+  const handleDeleteAccount = async () => {
+    const result = await deleteAccount();
+    if (!result.error) {
+      setUser(null);
+      setIsLocationEnabled(false);
+    }
+    return result;
+  };
+
   const enableLocation = async () => {
     if (!user) return false;
 
@@ -109,6 +119,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         signIn: handleSignIn,
         signUp: handleSignUp,
         signOut: handleSignOut,
+        deleteAccount: handleDeleteAccount,
         enableLocation,
         disableLocation,
       }}

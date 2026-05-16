@@ -116,12 +116,20 @@ export function formatHours(hours: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}`;
 }
 
-export function formatRelativeDate(iso?: string): string {
+export function formatRelativeDate(iso?: string, t?: (key: string, opts?: Record<string, any>) => string): string {
   if (!iso) return '';
   const d = new Date(iso);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (t) {
+    if (days === 0) return t('common.seenToday');
+    if (days === 1) return t('common.seenYesterday');
+    if (days < 7) return t('common.seenDaysAgo', { count: days });
+    if (days < 30) return t('common.seenWeeksAgo', { count: Math.floor(days / 7) });
+    return t('common.seenOn', { date: d.toLocaleDateString('fr-FR') });
+  }
+  // Fallback without translator
   if (days === 0) return "Vu aujourd'hui";
   if (days === 1) return 'Vu hier';
   if (days < 7) return `Vu il y a ${days} j`;

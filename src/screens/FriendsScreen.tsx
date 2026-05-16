@@ -12,6 +12,7 @@ import {
   sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend,
 } from '../services/friendService';
 import { Friend, RootStackParamList } from '../types';
+import { useTranslation } from 'react-i18next';
 import { THEME } from '../theme';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
@@ -19,6 +20,7 @@ import { Input } from '../components/Input';
 import { StatusPill } from '../components/StatusPill';
 
 export const FriendsScreen: React.FC = () => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -53,39 +55,39 @@ export const FriendsScreen: React.FC = () => {
   const handleSearch = async () => {
     if (!searchUsername.trim() || !user) return;
     if (searchUsername.trim().toLowerCase() === user.username.toLowerCase()) {
-      Alert.alert('Erreur', "Tu ne peux pas t'ajouter toi-meme");
+      Alert.alert(t('friends.error'), t('friends.cantAddSelf'));
       return;
     }
     setSearching(true);
     try {
       const found = await searchUserByUsername(searchUsername.trim());
       if (!found) {
-        Alert.alert('Utilisateur non trouve', `Aucun utilisateur avec le nom "${searchUsername}"`);
+        Alert.alert(t('friends.userNotFound'), t('friends.userNotFoundText', { username: searchUsername }));
         return;
       }
       const already = friends.some(f => f.friend?.id === found.id || f.friend_id === found.id);
       if (already) {
-        Alert.alert('Deja amis', `Tu es deja ami avec ${found.username}`);
+        Alert.alert(t('friends.alreadyFriends'), t('friends.alreadyFriendsText', { name: found.username }));
         return;
       }
-      Alert.alert('Utilisateur trouve', `Envoyer une demande a ${found.username} ?`, [
-        { text: 'Annuler', style: 'cancel' },
+      Alert.alert(t('friends.userFound'), t('friends.sendRequest', { name: found.username }), [
+        { text: t('friends.cancel'), style: 'cancel' },
         {
-          text: 'Envoyer',
+          text: t('friends.send'),
           onPress: async () => {
             const { success, error } = await sendFriendRequest(user.id, found.id);
             if (success) {
-              Alert.alert('Demande envoyee', `Demande envoyee a ${found.username}`);
+              Alert.alert(t('friends.requestSent'), t('friends.requestSentText', { name: found.username }));
               setSearchUsername('');
               setModalVisible(false);
             } else {
-              Alert.alert('Erreur', error || "Impossible d'envoyer la demande");
+              Alert.alert(t('friends.error'), error || t('friends.sendError'));
             }
           },
         },
       ]);
     } catch {
-      Alert.alert('Erreur', 'Une erreur est survenue');
+      Alert.alert(t('friends.error'), t('friends.genericError'));
     } finally {
       setSearching(false);
     }
@@ -94,32 +96,32 @@ export const FriendsScreen: React.FC = () => {
   const handleAccept = async (f: Friend) => {
     const { success, error } = await acceptFriendRequest(f.id);
     if (success) loadData();
-    else Alert.alert('Erreur', error || "Impossible d'accepter");
+    else Alert.alert(t('friends.error'), error || t('friends.acceptError'));
   };
 
   const handleReject = (f: Friend) => {
-    Alert.alert('Refuser la demande', `Refuser la demande de ${f.friend?.username} ?`, [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('friends.declineConfirm'), t('friends.declineConfirmText', { name: f.friend?.username }), [
+      { text: t('friends.cancel'), style: 'cancel' },
       {
-        text: 'Refuser', style: 'destructive',
+        text: t('friends.decline'), style: 'destructive',
         onPress: async () => {
           const { success, error } = await rejectFriendRequest(f.id);
           if (success) loadData();
-          else Alert.alert('Erreur', error || 'Impossible de refuser');
+          else Alert.alert(t('friends.error'), error || t('friends.declineError'));
         },
       },
     ]);
   };
 
   const handleRemove = (f: Friend) => {
-    Alert.alert("Supprimer l'ami", `Supprimer ${f.friend?.username} de tes amis ?`, [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('friends.removeConfirm'), t('friends.removeConfirmText', { name: f.friend?.username }), [
+      { text: t('friends.cancel'), style: 'cancel' },
       {
-        text: 'Supprimer', style: 'destructive',
+        text: t('friends.remove'), style: 'destructive',
         onPress: async () => {
           const { success, error } = await removeFriend(f.id);
           if (success) loadData();
-          else Alert.alert('Erreur', error || 'Impossible de supprimer');
+          else Alert.alert(t('friends.error'), error || t('friends.removeError'));
         },
       },
     ]);
@@ -132,7 +134,7 @@ export const FriendsScreen: React.FC = () => {
         <Avatar name={item.friend?.username} imageUrl={item.friend?.avatar_url} size={40} />
         <View style={{ flex: 1 }}>
           <Text style={s.friendName}>{item.friend?.username}</Text>
-          <Text style={s.pendingMeta}>t'a envoye une demande</Text>
+          <Text style={s.pendingMeta}>{t('friends.sentRequest')}</Text>
         </View>
       </View>
       <View style={s.pendingActions}>
@@ -142,7 +144,7 @@ export const FriendsScreen: React.FC = () => {
           fullWidth
           onPress={() => handleAccept(item)}
         >
-          Accepter
+          {t('friends.accept')}
         </Button>
         <Button
           variant="secondary" size="sm" leadingIcon={X}
@@ -150,7 +152,7 @@ export const FriendsScreen: React.FC = () => {
           fullWidth
           onPress={() => handleReject(item)}
         >
-          Refuser
+          {t('friends.decline')}
         </Button>
       </View>
     </View>
@@ -174,7 +176,7 @@ export const FriendsScreen: React.FC = () => {
       <View style={{ flex: 1 }}>
         <Text style={s.friendName}>{item.friend?.username}</Text>
         <Text style={s.friendMeta}>
-          Ami depuis le {new Date(item.created_at).toLocaleDateString('fr-FR')}
+          {t('friends.friendSince', { date: new Date(item.created_at).toLocaleDateString('fr-FR') })}
         </Text>
       </View>
     </Pressable>
@@ -183,19 +185,19 @@ export const FriendsScreen: React.FC = () => {
   return (
     <View style={s.container}>
       <View style={s.header}>
-        <Text style={s.title}>Mes amis</Text>
+        <Text style={s.title}>{t('friends.title')}</Text>
         <Button
           variant="primary" size="sm" leadingIcon={Plus}
           style={{ borderRadius: 999, paddingHorizontal: 14 }}
           onPress={() => setModalVisible(true)}
         >
-          Ajouter
+          {t('friends.add')}
         </Button>
       </View>
 
       {pending.length > 0 && (
         <View style={s.section}>
-          <Text style={s.sectionEyebrow}>Demandes en attente · {pending.length}</Text>
+          <Text style={s.sectionEyebrow}>{t('friends.pendingRequests')} · {pending.length}</Text>
           <FlatList
             data={pending}
             renderItem={renderPending}
@@ -218,15 +220,15 @@ export const FriendsScreen: React.FC = () => {
         ListHeaderComponent={
           friends.length > 0 ? (
             <Text style={[s.sectionEyebrow, { marginBottom: 10 }]}>
-              Tes amis · {friends.length}
+              {t('friends.yourFriends')} · {friends.length}
             </Text>
           ) : null
         }
         ListEmptyComponent={
           <View style={s.empty}>
-            <Text style={s.emptyTitle}>Aucun ami pour l'instant</Text>
+            <Text style={s.emptyTitle}>{t('friends.noFriends')}</Text>
             <Text style={s.emptyText}>
-              Ajoute des amis pour commencer a tracker le temps passe ensemble.
+              {t('friends.noFriendsText')}
             </Text>
           </View>
         }
@@ -241,10 +243,10 @@ export const FriendsScreen: React.FC = () => {
       >
         <View style={s.modalOverlay}>
           <View style={[s.modalCard, THEME.shadow.lg]}>
-            <Text style={s.modalTitle}>Ajouter un ami</Text>
-            <Text style={s.modalSubtitle}>Entre le nom d'utilisateur de ton ami.</Text>
+            <Text style={s.modalTitle}>{t('friends.addFriend')}</Text>
+            <Text style={s.modalSubtitle}>{t('friends.addFriendText')}</Text>
             <Input
-              placeholder="Nom d'utilisateur"
+              placeholder={t('friends.usernamePlaceholder')}
               value={searchUsername}
               onChangeText={setSearchUsername}
               autoCapitalize="none"
@@ -256,7 +258,7 @@ export const FriendsScreen: React.FC = () => {
                 style={{ flex: 1 }} fullWidth
                 onPress={() => { setModalVisible(false); setSearchUsername(''); }}
               >
-                Annuler
+                {t('friends.cancel')}
               </Button>
               <Button
                 variant="primary" leadingIcon={Search}
@@ -264,7 +266,7 @@ export const FriendsScreen: React.FC = () => {
                 loading={searching}
                 onPress={handleSearch}
               >
-                Rechercher
+                {t('friends.search')}
               </Button>
             </View>
           </View>

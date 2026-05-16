@@ -3,6 +3,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 import { THEME } from '../theme';
 
 interface HeroStatCardProps {
@@ -12,6 +13,7 @@ interface HeroStatCardProps {
 }
 
 export const HeroStatCard: React.FC<HeroStatCardProps> = ({ month, hoursLabel, friendsCount }) => {
+  const { t } = useTranslation();
   return (
     <LinearGradient
       colors={['#E66A3C', '#F2B95C']}
@@ -28,12 +30,12 @@ export const HeroStatCard: React.FC<HeroStatCardProps> = ({ month, hoursLabel, f
       <View style={s.row}>
         <View style={s.stat}>
           <Text style={s.num}>{hoursLabel}</Text>
-          <Text style={s.label}>passees ensemble</Text>
+          <Text style={s.label}>{t('home.togetherMonth')}</Text>
         </View>
         <View style={s.divider} />
         <View style={s.stat}>
           <Text style={s.num}>{friendsCount}</Text>
-          <Text style={s.label}>{friendsCount === 1 ? 'ami vu' : 'amis vus'}</Text>
+          <Text style={s.label}>{friendsCount === 1 ? t('home.friendSeen') : t('home.friendsSeen')}</Text>
         </View>
       </View>
     </LinearGradient>

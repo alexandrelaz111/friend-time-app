@@ -9,20 +9,21 @@ import { useAuth } from '../context/AuthContext';
 import { getFriendSessions, computeStreak } from '../services/friendService';
 import { supabase } from '../services/supabase';
 import { TimeSession, RootStackParamList, User } from '../types';
+import { useTranslation } from 'react-i18next';
 import { THEME, formatHours } from '../theme';
 import { Avatar } from '../components/Avatar';
 import { StreakBadge } from '../components/StreakBadge';
 
 type DetailRoute = RouteProp<RootStackParamList, 'FriendDetail'>;
 
-const formatSessionDate = (iso: string) => {
+const formatSessionDate = (iso: string, t: (key: string, opts?: Record<string, any>) => string) => {
   const d = new Date(iso);
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) return "Aujourd'hui";
-  if (diffDays === 1) return 'Hier';
-  if (diffDays < 7) return `Il y a ${diffDays} jours`;
+  if (diffDays === 0) return t('detail.today');
+  if (diffDays === 1) return t('detail.yesterday');
+  if (diffDays < 7) return t('detail.daysAgo', { count: diffDays });
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
 };
 
@@ -35,6 +36,7 @@ const formatDuration = (seconds: number) => {
 };
 
 export const FriendDetailScreen: React.FC = () => {
+  const { t } = useTranslation();
   const route = useRoute<DetailRoute>();
   const { friendId, friendName, friendAvatarUrl } = route.params;
   const { user } = useAuth();
@@ -78,7 +80,7 @@ export const FriendDetailScreen: React.FC = () => {
   // Grouper par date
   const sessionsByDate = new Map<string, TimeSession[]>();
   for (const session of sessions) {
-    const label = formatSessionDate(session.started_at);
+    const label = formatSessionDate(session.started_at, t);
     const existing = sessionsByDate.get(label) || [];
     existing.push(session);
     sessionsByDate.set(label, existing);
@@ -103,7 +105,7 @@ export const FriendDetailScreen: React.FC = () => {
             <Clock3 size={18} color={THEME.color.ember} strokeWidth={1.75} />
           </View>
           <Text style={s.statValue}>{formatHours(totalHours)}</Text>
-          <Text style={s.statLabel}>ensemble</Text>
+          <Text style={s.statLabel}>{t('detail.together')}</Text>
         </View>
         <View style={s.statDivider} />
         <View style={s.statItem}>
@@ -111,7 +113,7 @@ export const FriendDetailScreen: React.FC = () => {
             <Calendar size={18} color={THEME.color.sage} strokeWidth={1.75} />
           </View>
           <Text style={s.statValue}>{sessions.length}</Text>
-          <Text style={s.statLabel}>{sessions.length === 1 ? 'session' : 'sessions'}</Text>
+          <Text style={s.statLabel}>{sessions.length === 1 ? t('detail.session') : t('detail.sessions')}</Text>
         </View>
         <View style={s.statDivider} />
         <View style={s.statItem}>
@@ -119,18 +121,18 @@ export const FriendDetailScreen: React.FC = () => {
             <Flame size={18} color={THEME.color.honeyDeep} strokeWidth={1.75} />
           </View>
           <Text style={s.statValue}>{streak > 0 ? `${streak}j` : '—'}</Text>
-          <Text style={s.statLabel}>streak</Text>
+          <Text style={s.statLabel}>{t('detail.streak')}</Text>
         </View>
       </View>
 
       {/* Historique */}
-      <Text style={s.sectionTitle}>Historique</Text>
+      <Text style={s.sectionTitle}>{t('detail.history')}</Text>
 
       {sessions.length === 0 ? (
         <View style={[s.emptyCard, THEME.shadow.sm]}>
-          <Text style={s.emptyTitle}>Aucune session</Text>
+          <Text style={s.emptyTitle}>{t('detail.noSessions')}</Text>
           <Text style={s.emptyText}>
-            Passe du temps avec {friendName} pour voir l'historique ici.
+            {t('detail.noSessionsText', { name: friendName })}
           </Text>
         </View>
       ) : (
@@ -144,7 +146,7 @@ export const FriendDetailScreen: React.FC = () => {
                 </Text>
                 <View style={s.sessionInfo}>
                   <Text style={s.sessionPlace}>
-                    {session.place_name || 'Lieu inconnu'}
+                    {session.place_name || t('detail.unknownPlace')}
                   </Text>
                   {session.city ? (
                     <Text style={s.sessionCity}>{session.city}</Text>

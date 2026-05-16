@@ -6,6 +6,7 @@ import {
 import MapView, { Marker, Callout, Region } from 'react-native-maps';
 import { useFocusEffect } from '@react-navigation/native';
 import { X } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabase';
 import { THEME, formatHours } from '../theme';
@@ -87,6 +88,7 @@ const formatDuration = (seconds: number) => {
 };
 
 export const MapScreen: React.FC = () => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [markers, setMarkers] = useState<SessionMarker[]>([]);
   const [loading, setLoading] = useState(true);
@@ -199,8 +201,8 @@ export const MapScreen: React.FC = () => {
 
       {/* Header flottant */}
       <View style={s.header}>
-        <Text style={s.headerTitle}>Nos lieux</Text>
-        <Text style={s.headerCount}>{markers.length} lieu{markers.length > 1 ? 'x' : ''}</Text>
+        <Text style={s.headerTitle}>{t('map.ourPlaces')}</Text>
+        <Text style={s.headerCount}>{markers.length > 1 ? t('map.places', { count: markers.length }) : t('map.place', { count: markers.length })}</Text>
       </View>
 
       {/* Card du lieu sélectionné */}
@@ -223,17 +225,17 @@ export const MapScreen: React.FC = () => {
           <View style={s.cardStats}>
             <View style={s.cardStat}>
               <Text style={s.cardStatValue}>{formatDuration(selected.duration_seconds)}</Text>
-              <Text style={s.cardStatLabel}>ensemble</Text>
+              <Text style={s.cardStatLabel}>{t('map.together')}</Text>
             </View>
             <View style={s.cardStatDivider} />
             <View style={s.cardStat}>
               <Text style={s.cardStatValue}>{selected.sessions}</Text>
-              <Text style={s.cardStatLabel}>visite{selected.sessions > 1 ? 's' : ''}</Text>
+              <Text style={s.cardStatLabel}>{selected.sessions > 1 ? t('map.visits') : t('map.visit')}</Text>
             </View>
             <View style={s.cardStatDivider} />
             <View style={s.cardStat}>
               <Text style={s.cardStatValue}>{formatDate(selected.started_at)}</Text>
-              <Text style={s.cardStatLabel}>derniere fois</Text>
+              <Text style={s.cardStatLabel}>{t('map.lastTime')}</Text>
             </View>
           </View>
 
@@ -246,7 +248,7 @@ export const MapScreen: React.FC = () => {
               ))}
             </View>
             <Text style={s.cardFriendName}>
-              avec {selected.friends.map(f => f.friend_name).join(', ')}
+              {t('map.with')} {selected.friends.map(f => f.friend_name).join(', ')}
             </Text>
           </View>
         </View>
@@ -255,9 +257,9 @@ export const MapScreen: React.FC = () => {
       {/* Empty state */}
       {markers.length === 0 && !loading && (
         <View style={[s.emptyCard, THEME.shadow.md]}>
-          <Text style={s.emptyTitle}>Aucun lieu pour l'instant</Text>
+          <Text style={s.emptyTitle}>{t('map.noPlaces')}</Text>
           <Text style={s.emptyText}>
-            Les endroits ou tu passes du temps avec tes amis apparaitront ici.
+            {t('map.noPlacesText')}
           </Text>
         </View>
       )}

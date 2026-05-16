@@ -4,6 +4,7 @@ import {
   View, Text, KeyboardAvoidingView, Platform, Alert, StyleSheet, Pressable, ScrollView,
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { THEME } from '../theme';
 import { Input } from '../components/Input';
@@ -12,6 +13,7 @@ import { Button } from '../components/Button';
 interface Props { navigation: any; }
 
 export const LoginScreen: React.FC<Props> = ({ navigation }) => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,13 +21,13 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+      Alert.alert(t('auth.error'), t('auth.fillAllFields'));
       return;
     }
     setLoading(true);
     const { error } = await signIn(email.trim(), password);
     setLoading(false);
-    if (error) Alert.alert('Erreur de connexion', error);
+    if (error) Alert.alert(t('auth.signInError'), error);
   };
 
   return (
@@ -42,12 +44,12 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
             <Circle cx="32" cy="32" r="2.4" fill="#FFFFFF" />
           </Svg>
           <Text style={s.wordmark}>FriendTime</Text>
-          <Text style={s.tagline}>Le temps passe ensemble,{'\n'}compte pour de vrai.</Text>
+          <Text style={s.tagline}>{t('auth.welcomeSubtitle')}</Text>
         </View>
 
         <View style={s.form}>
           <Input
-            placeholder="Email"
+            placeholder={t('auth.email')}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -55,17 +57,17 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
             autoCorrect={false}
           />
           <Input
-            placeholder="Mot de passe"
+            placeholder={t('auth.password')}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
           />
           <Button variant="primary" size="lg" onPress={handleLogin} loading={loading} fullWidth>
-            Se connecter
+            {t('auth.signIn')}
           </Button>
           <Pressable onPress={() => navigation.navigate('Register')} style={s.linkRow}>
             <Text style={s.linkText}>
-              Pas encore de compte ? <Text style={s.linkBold}>S'inscrire</Text>
+              {t('auth.noAccount')} <Text style={s.linkBold}>{t('auth.createOne')}</Text>
             </Text>
           </Pressable>
         </View>

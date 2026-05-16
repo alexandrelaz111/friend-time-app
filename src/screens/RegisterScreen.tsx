@@ -4,6 +4,7 @@ import {
   View, Text, KeyboardAvoidingView, Platform, ScrollView, Alert, Pressable, StyleSheet,
 } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { THEME } from '../theme';
 import { Input } from '../components/Input';
@@ -12,6 +13,7 @@ import { Button } from '../components/Button';
 interface Props { navigation: any; }
 
 export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -21,29 +23,29 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleRegister = async () => {
     if (!email.trim() || !username.trim() || !password.trim()) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+      Alert.alert(t('auth.error'), t('auth.fillAllFields'));
       return;
     }
     if (username.length < 3) {
-      Alert.alert('Erreur', "Le nom d'utilisateur doit faire au moins 3 caracteres");
+      Alert.alert(t('auth.error'), t('auth.usernameMinLength'));
       return;
     }
     if (password.length < 6) {
-      Alert.alert('Erreur', 'Le mot de passe doit faire au moins 6 caracteres');
+      Alert.alert(t('auth.error'), t('auth.passwordMinLength'));
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Erreur', 'Les mots de passe ne correspondent pas');
+      Alert.alert(t('auth.error'), t('auth.passwordMismatch'));
       return;
     }
     setLoading(true);
     const { error } = await signUp(email.trim(), password, username.trim());
     setLoading(false);
     if (error) {
-      Alert.alert("Erreur d'inscription", error);
+      Alert.alert(t('auth.signUpError'), error);
     } else {
-      Alert.alert('Compte cree !', 'Verifie tes emails pour confirmer ton compte.', [
-        { text: 'OK', onPress: () => navigation.navigate('Login') },
+      Alert.alert(t('auth.accountCreated'), '', [
+        { text: t('common.ok'), onPress: () => navigation.navigate('Login') },
       ]);
     }
   };
@@ -56,17 +58,17 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
         <Pressable onPress={() => navigation.navigate('Login')} style={s.back}>
           <ArrowLeft size={16} color={THEME.color.fg2} strokeWidth={1.75} />
-          <Text style={s.backText}>Retour</Text>
+          <Text style={s.backText}>{t('auth.back')}</Text>
         </Pressable>
 
-        <Text style={s.title}>Cree ton compte</Text>
+        <Text style={s.title}>{t('auth.registerTitle')}</Text>
         <Text style={s.subtitle}>
-          Trois infos, et tu peux commencer a mesurer le temps avec tes amis.
+          {t('auth.registerSubtitle')}
         </Text>
 
         <View style={s.form}>
           <Input
-            placeholder="Email"
+            placeholder={t('auth.email')}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -74,30 +76,29 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
             autoCorrect={false}
           />
           <Input
-            placeholder="Nom d'utilisateur"
+            placeholder={t('auth.username')}
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
             autoCorrect={false}
           />
           <Input
-            placeholder="Mot de passe"
+            placeholder={t('auth.password')}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
           />
           <Input
-            placeholder="Confirme le mot de passe"
+            placeholder={t('auth.confirmPassword')}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry
           />
           <Button variant="primary" size="lg" onPress={handleRegister} loading={loading} fullWidth>
-            Creer mon compte
+            {t('auth.createAccount')}
           </Button>
           <Text style={s.fineprint}>
-            En t'inscrivant, tu acceptes que ta proximite avec tes amis soit mesuree.{'\n'}
-            Ta position exacte n'est jamais partagee.
+            {t('auth.privacyNote')}
           </Text>
         </View>
       </ScrollView>

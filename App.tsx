@@ -1,4 +1,5 @@
 // App.tsx — charge les fonts puis monte l'app.
+import './src/i18n';
 import React from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
