@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Friend, User, FriendTimeStats, MonthlyStats } from '../types';
+import { Friend, User, FriendTimeStats, MonthlyStats, TimeSession } from '../types';
 
 /**
  * Recherche un utilisateur par username
@@ -206,10 +206,10 @@ export const getFriendTimeStats = async (
   for (const friend of friends) {
     const friendId = friend.friend?.id || friend.friend_id;
 
-    // Récupère le total des sessions
+    // Récupère le total des sessions (+ infos lieu pour la dernière)
     const { data: sessions } = await supabase
       .from('time_sessions')
-      .select('duration_seconds, started_at')
+      .select('duration_seconds, started_at, place_name, place_emoji, city')
       .or(`and(user_id.eq.${userId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${userId})`)
       .eq('is_active', false);
 
@@ -227,9 +227,12 @@ export const getFriendTimeStats = async (
       friend_id: friendId,
       friend: friend.friend!,
       total_seconds: totalSeconds,
-      total_hours: Math.round((totalSeconds / 3600) * 10) / 10, // 1 décimale
+      total_hours: totalSeconds / 3600,
       sessions_count: sessions?.length || 0,
       last_seen: lastSession?.started_at,
+      last_place_name:  lastSession?.place_name  || undefined,
+      last_place_emoji: lastSession?.place_emoji || undefined,
+      last_city:        lastSession?.city        || undefined,
     });
   }
 
@@ -307,4 +310,62 @@ export const getStatsForPeriod = async (
     friendsCount: friendIds.size,
     topFriend,
   };
+};
+
+/**
+ * Récupère toutes les sessions entre deux utilisateurs
+ */
+export const getFriendSessions = async (
+  userId: string,
+  friendId: string
+): Promise<TimeSession[]> => {
+  const { data } = await supabase
+    .from('time_sessions')
+    .select('*')
+    .or(`and(user_id.eq.${userId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${userId})`)
+    .eq('is_active', false)
+    .order('started_at', { ascending: false });
+
+  return (data || []) as TimeSession[];
+};
+
+/**
+ * Calcule le streak (jours consécutifs) avec un ami à partir des sessions
+ */
+export const computeStreak = (sessions: TimeSession[]): number => {
+  if (sessions.length === 0) return 0;
+
+  // Extraire les jours uniques (format YYYY-MM-DD)
+  const days = new Set<string>();
+  for (const s of sessions) {
+    const d = new Date(s.started_at);
+    days.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+  }
+
+  const sortedDays = Array.from(days).sort().reverse();
+
+  // Vérifier si la série inclut aujourd'hui ou hier
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
+  if (sortedDays[0] !== todayStr && sortedDays[0] !== yesterdayStr) return 0;
+
+  // Compter les jours consécutifs en remontant
+  let streak = 1;
+  for (let i = 0; i < sortedDays.length - 1; i++) {
+    const current = new Date(sortedDays[i]);
+    const next = new Date(sortedDays[i + 1]);
+    const diffMs = current.getTime() - next.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 1) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+
+  return streak;
 };

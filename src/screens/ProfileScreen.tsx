@@ -1,18 +1,40 @@
-import React, { useState } from 'react';
+// src/screens/ProfileScreen.tsx
+import React, { useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ScrollView,
-  Switch,
+  View, Text, StyleSheet, Pressable, Alert, ScrollView, Switch,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { MapPin, MapPinOff, Bell, ChevronRight, LogOut } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
+import { getFriends, getFriendTimeStats } from '../services/friendService';
+import { THEME, formatHours } from '../theme';
+import { Avatar } from '../components/Avatar';
 
 export const ProfileScreen: React.FC = () => {
   const { user, signOut, isLocationEnabled, enableLocation, disableLocation } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [profileStats, setProfileStats] = useState({ totalHours: 0, friendsCount: 0, sessionsCount: 0 });
+
+  const loadProfileStats = async () => {
+    if (!user) return;
+    try {
+      const [friends, stats] = await Promise.all([
+        getFriends(user.id),
+        getFriendTimeStats(user.id),
+      ]);
+      const totalSessions = stats.reduce((sum, s) => sum + s.sessions_count, 0);
+      const totalHours = stats.reduce((sum, s) => sum + s.total_hours, 0);
+      setProfileStats({
+        totalHours: Math.round(totalHours * 10) / 10,
+        friendsCount: friends.length,
+        sessionsCount: totalSessions,
+      });
+    } catch (e) {
+      console.error('Erreur chargement stats profil:', e);
+    }
+  };
+
+  useFocusEffect(useCallback(() => { loadProfileStats(); }, [user]));
 
   const handleToggleLocation = async (value: boolean) => {
     if (value) {
@@ -20,247 +42,263 @@ export const ProfileScreen: React.FC = () => {
       if (!success) {
         Alert.alert(
           'Permission requise',
-          'Autorise l\'accès à la localisation dans les paramètres de ton téléphone pour utiliser cette fonctionnalité.'
+          "Autorise l'acces a la localisation dans les parametres de ton telephone."
         );
       }
     } else {
       Alert.alert(
-        'Désactiver le tracking',
-        'Tu ne pourras plus mesurer le temps passé avec tes amis. Continuer ?',
+        'Desactiver le tracking',
+        'Tu ne pourras plus mesurer le temps passe avec tes amis. Continuer ?',
         [
           { text: 'Annuler', style: 'cancel' },
-          {
-            text: 'Désactiver',
-            style: 'destructive',
-            onPress: disableLocation,
-          },
+          { text: 'Desactiver', style: 'destructive', onPress: disableLocation },
         ]
       );
     }
   };
 
   const handleSignOut = () => {
-    Alert.alert(
-      'Déconnexion',
-      'Tu es sûr de vouloir te déconnecter ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Déconnecter',
-          style: 'destructive',
-          onPress: async () => {
-            setLoggingOut(true);
-            await signOut();
-          },
-        },
-      ]
-    );
+    Alert.alert('Deconnexion', 'Tu es sur de vouloir te deconnecter ?', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Deconnecter',
+        style: 'destructive',
+        onPress: async () => { setLoggingOut(true); await signOut(); },
+      },
+    ]);
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Profil */}
-      <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {user?.username.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        <Text style={styles.username}>{user?.username}</Text>
-        <Text style={styles.email}>{user?.email}</Text>
-      </View>
+    <ScrollView style={s.container} contentContainerStyle={s.content}>
+      {/* Carte profil */}
+      <View style={[s.profileCard, THEME.shadow.sm]}>
+        <Avatar name={user?.username} size={92} />
+        <Text style={s.username}>{user?.username}</Text>
+        <Text style={s.email}>{user?.email}</Text>
 
-      {/* Paramètres */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Paramètres</Text>
-
-        <View style={styles.settingCard}>
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Tracking de localisation</Text>
-              <Text style={styles.settingDescription}>
-                Mesure automatiquement le temps passé avec tes amis
-              </Text>
-            </View>
-            <Switch
-              value={isLocationEnabled}
-              onValueChange={handleToggleLocation}
-              trackColor={{ false: '#334155', true: '#6366f1' }}
-              thumbColor={isLocationEnabled ? '#fff' : '#94a3b8'}
-            />
+        <View style={s.statsRow}>
+          <View style={s.statCol}>
+            <Text style={[s.statValue, { color: THEME.color.ember }]}>{formatHours(profileStats.totalHours)}</Text>
+            <Text style={s.statLabel}>total</Text>
+          </View>
+          <View style={s.statDivider} />
+          <View style={s.statCol}>
+            <Text style={s.statValue}>{profileStats.friendsCount}</Text>
+            <Text style={s.statLabel}>{profileStats.friendsCount === 1 ? 'ami' : 'amis'}</Text>
+          </View>
+          <View style={s.statDivider} />
+          <View style={s.statCol}>
+            <Text style={s.statValue}>{profileStats.sessionsCount}</Text>
+            <Text style={s.statLabel}>sessions</Text>
           </View>
         </View>
-
-        <View style={styles.settingCard}>
-          <TouchableOpacity style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Distance de proximité</Text>
-              <Text style={styles.settingDescription}>
-                50 mètres (par défaut)
-              </Text>
-            </View>
-            <Text style={styles.settingArrow}>{'>'}</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
-      {/* Informations */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>À propos</Text>
-
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Comment ça marche ?</Text>
-          <Text style={styles.infoText}>
-            FriendTime utilise ta localisation pour détecter quand tu es proche de tes amis (à moins de 50 mètres).
-            Le temps passé ensemble est automatiquement comptabilisé.
-          </Text>
-          <Text style={styles.infoText}>
-            Pour que ça fonctionne, toi ET ton ami devez avoir l'app installée avec le tracking activé.
-          </Text>
+      {/* Parametres */}
+      <Text style={s.sectionEyebrow}>Parametres</Text>
+      <View style={[s.settingsGroup, THEME.shadow.sm]}>
+        <View style={s.settingRow}>
+          <View style={[s.settingIcon, {
+            backgroundColor: isLocationEnabled ? THEME.color.sageSoft : THEME.color.tomatoSoft,
+          }]}>
+            {isLocationEnabled
+              ? <MapPin size={18} color={THEME.color.sageDeep} strokeWidth={1.75} />
+              : <MapPinOff size={18} color={THEME.color.tomato} strokeWidth={1.75} />}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.settingLabel}>Tracking de localisation</Text>
+            <Text style={s.settingDesc}>Mesure auto du temps avec tes amis</Text>
+          </View>
+          <Switch
+            value={isLocationEnabled}
+            onValueChange={handleToggleLocation}
+            trackColor={{ false: THEME.color.sand, true: THEME.color.ember }}
+            thumbColor="#FFFFFF"
+            ios_backgroundColor={THEME.color.sand}
+          />
         </View>
 
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Vie privée</Text>
-          <Text style={styles.infoText}>
-            Seuls tes amis acceptés peuvent voir que tu es proche d'eux.
-            Ta position exacte n'est jamais partagée, seulement la proximité.
-          </Text>
-        </View>
+        <View style={s.divider} />
+
+        <Pressable style={({ pressed }) => [s.settingRow, pressed && { opacity: 0.7 }]}>
+          <View style={[s.settingIcon, { backgroundColor: THEME.color.shell }]}>
+            <MapPin size={18} color={THEME.color.fg2} strokeWidth={1.75} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.settingLabel}>Distance de proximite</Text>
+            <Text style={s.settingDesc}>50 metres</Text>
+          </View>
+          <ChevronRight size={18} color={THEME.color.fg3} strokeWidth={1.75} />
+        </Pressable>
+
+        <View style={s.divider} />
+
+        <Pressable style={({ pressed }) => [s.settingRow, pressed && { opacity: 0.7 }]}>
+          <View style={[s.settingIcon, { backgroundColor: THEME.color.shell }]}>
+            <Bell size={18} color={THEME.color.fg2} strokeWidth={1.75} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.settingLabel}>Notifications</Text>
+            <Text style={s.settingDesc}>Toutes activees</Text>
+          </View>
+          <ChevronRight size={18} color={THEME.color.fg3} strokeWidth={1.75} />
+        </Pressable>
       </View>
 
-      {/* Version et déconnexion */}
-      <View style={styles.footer}>
-        <Text style={styles.version}>FriendTime v1.0.0</Text>
-
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={handleSignOut}
-          disabled={loggingOut}
-        >
-          <Text style={styles.logoutText}>
-            {loggingOut ? 'Déconnexion...' : 'Se déconnecter'}
-          </Text>
-        </TouchableOpacity>
+      {/* A propos */}
+      <Text style={s.sectionEyebrow}>A propos</Text>
+      <View style={s.infoCard}>
+        <Text style={s.infoTitle}>Vie privee d'abord</Text>
+        <Text style={s.infoText}>
+          Ta position exacte n'est jamais partagee. Seule la proximite avec tes amis est mesuree,
+          et seulement entre vous.
+        </Text>
       </View>
+
+      {/* Sign out */}
+      <Pressable
+        onPress={handleSignOut}
+        disabled={loggingOut}
+        style={({ pressed }) => [s.signOut, pressed && { opacity: 0.7 }]}
+      >
+        <LogOut size={18} color={THEME.color.tomato} strokeWidth={1.75} />
+        <Text style={s.signOutText}>{loggingOut ? 'Deconnexion...' : 'Se deconnecter'}</Text>
+      </Pressable>
+      <Text style={s.version}>FriendTime v1.0.0</Text>
     </ScrollView>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: THEME.color.cream },
+  content: { padding: 20, paddingBottom: 32 },
+
   profileCard: {
-    backgroundColor: '#1e293b',
-    borderRadius: 20,
-    padding: 24,
+    backgroundColor: THEME.color.paper,
+    borderRadius: 28,
+    paddingHorizontal: 20, paddingVertical: 28,
     alignItems: 'center',
-    marginBottom: 24,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#6366f1',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  avatarText: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
   },
   username: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    marginTop: 14,
+    fontFamily: THEME.font.display,
+    fontSize: 32,
+    lineHeight: 34,
+    color: THEME.color.ink,
+    letterSpacing: -0.5,
   },
   email: {
-    color: '#94a3b8',
+    marginTop: 6,
     fontSize: 14,
+    fontFamily: THEME.font.body,
+    color: THEME.color.fg2,
   },
-  section: {
-    marginBottom: 24,
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+    marginTop: 18, paddingTop: 18,
+    borderTopWidth: 1, borderTopColor: THEME.color.sandSoft,
+    alignSelf: 'stretch',
   },
-  sectionTitle: {
-    color: '#94a3b8',
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 12,
+  statCol: { flex: 1, alignItems: 'center' },
+  statValue: {
+    fontFamily: THEME.font.display,
+    fontSize: 28,
+    lineHeight: 30,
+    color: THEME.color.ink,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontFamily: THEME.font.bodySemibold,
+    color: THEME.color.fg2,
+    marginTop: 4,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  statDivider: { width: 1, backgroundColor: THEME.color.sandSoft },
+
+  sectionEyebrow: {
+    fontSize: 11,
+    fontFamily: THEME.font.bodySemibold,
+    color: THEME.color.fg2,
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+    marginTop: 24,
+    marginBottom: 10,
     marginLeft: 4,
   },
-  settingCard: {
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    marginBottom: 8,
+
+  settingsGroup: {
+    backgroundColor: THEME.color.paper,
+    borderRadius: 20,
     overflow: 'hidden',
   },
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
+    gap: 14,
   },
-  settingInfo: {
-    flex: 1,
-    marginRight: 12,
+  settingIcon: {
+    width: 38, height: 38, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
   },
   settingLabel: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 15,
+    fontFamily: THEME.font.bodySemibold,
+    color: THEME.color.ink,
   },
-  settingDescription: {
-    color: '#64748b',
+  settingDesc: {
     fontSize: 12,
+    fontFamily: THEME.font.body,
+    color: THEME.color.fg2,
     marginTop: 2,
   },
-  settingArrow: {
-    color: '#64748b',
-    fontSize: 18,
+  divider: {
+    height: 1,
+    backgroundColor: THEME.color.sandSoft,
+    marginLeft: 68,
   },
+
   infoCard: {
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
+    backgroundColor: THEME.color.linen,
+    borderWidth: 1,
+    borderColor: THEME.color.sandSoft,
+    borderRadius: 18,
     padding: 16,
-    marginBottom: 8,
   },
   infoTitle: {
-    color: '#fff',
     fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
+    fontFamily: THEME.font.bodyBold,
+    color: THEME.color.ink,
+    marginBottom: 6,
   },
   infoText: {
-    color: '#94a3b8',
     fontSize: 13,
+    fontFamily: THEME.font.body,
+    color: THEME.color.fg2,
     lineHeight: 20,
-    marginBottom: 8,
   },
-  footer: {
+
+  signOut: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 28,
+    padding: 12,
+  },
+  signOutText: {
+    fontSize: 15,
+    fontFamily: THEME.font.bodyBold,
+    color: THEME.color.tomato,
   },
   version: {
-    color: '#64748b',
-    fontSize: 12,
-    marginBottom: 24,
-  },
-  logoutButton: {
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  logoutText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 4,
+    fontSize: 11,
+    fontFamily: THEME.font.body,
+    color: THEME.color.fg3,
   },
 });

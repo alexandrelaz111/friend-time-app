@@ -42,6 +42,14 @@ export interface TimeSession {
   ended_at?: string;
   duration_seconds: number;
   is_active: boolean;
+  // Coordonnées GPS (enregistrées au début de la session)
+  latitude?: number;
+  longitude?: number;
+  // Lieu détecté via reverse geocoding
+  place_name?: string;
+  place_category?: string;
+  place_emoji?: string;
+  city?: string;
 }
 
 export interface FriendTimeStats {
@@ -51,6 +59,10 @@ export interface FriendTimeStats {
   total_hours: number;
   sessions_count: number;
   last_seen?: string;
+  // Dernier lieu connu avec cet ami
+  last_place_name?: string;
+  last_place_emoji?: string;
+  last_city?: string;
 }
 
 export interface MonthlyStats {
@@ -59,6 +71,12 @@ export interface MonthlyStats {
   total_seconds: number;
   total_hours: number;
 }
+
+// Navigation
+export type RootStackParamList = {
+  MainTabs: undefined;
+  FriendDetail: { friendId: string; friendName: string; friendAvatarUrl?: string };
+};
 
 // Configuration de la géolocalisation
 export interface LocationConfig {

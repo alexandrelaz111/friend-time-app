@@ -9,31 +9,44 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#6366f1"
+      "backgroundColor": "#F7F2EA"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourname.friendtime",
+      "bundleIdentifier": "com.alexlazerat.friendtime",
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "FriendTime utilise votre localisation pour calculer le temps passé avec vos amis, même quand l'app est fermée.",
         "NSLocationWhenInUseUsageDescription": "FriendTime utilise votre localisation pour détecter quand vous êtes avec vos amis.",
         "NSLocationAlwaysUsageDescription": "FriendTime a besoin d'accéder à votre localisation en arrière-plan pour calculer automatiquement le temps passé avec vos amis.",
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "location",
+          "fetch"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#6366f1"
+        "backgroundColor": "#F7F2EA"
       },
-      "package": "com.yourname.friendtime",
+      "package": "com.alexlazerat.friendtime",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "FOREGROUND_SERVICE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "plugins": [
@@ -44,7 +57,14 @@
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
-      ]
-    ]
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "70a8a83b-dc0b-4757-829c-536bb9dc4c9c"
+      }
+    },
+    "owner": "alazerat"
   }
 }

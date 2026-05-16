@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { supabase } from './supabase';
+import { getPlaceFromCoords } from './placesService';
 import { DEFAULT_LOCATION_CONFIG, Location as LocationType } from '../types';
 
 // Nom de la tâche de géolocalisation en arrière-plan
@@ -278,7 +279,7 @@ export const checkProximityWithFriends = async (
     // Démarrer de nouvelles sessions pour les amis nouvellement proches
     for (const friend of nearbyFriends || []) {
       if (!activeSessionFriendIds.has(friend.friend_id)) {
-        await startTimeSession(friend.friend_id);
+        await startTimeSession(friend.friend_id, latitude, longitude);
         console.log(`Session démarrée avec ${friend.username}`);
       }
     }
@@ -296,9 +297,14 @@ export const checkProximityWithFriends = async (
 };
 
 /**
- * Démarre une nouvelle session de temps avec un ami
+ * Démarre une nouvelle session de temps avec un ami.
+ * Les coordonnées GPS sont enregistrées pour le reverse geocoding ultérieur.
  */
-export const startTimeSession = async (friendId: string): Promise<void> => {
+export const startTimeSession = async (
+  friendId: string,
+  latitude?: number,
+  longitude?: number,
+): Promise<void> => {
   if (!currentUserId) return;
 
   const { error } = await supabase
@@ -308,6 +314,7 @@ export const startTimeSession = async (friendId: string): Promise<void> => {
       friend_id: friendId,
       started_at: new Date().toISOString(),
       is_active: true,
+      ...(latitude != null && longitude != null ? { latitude, longitude } : {}),
     });
 
   if (error) {
@@ -316,15 +323,17 @@ export const startTimeSession = async (friendId: string): Promise<void> => {
 };
 
 /**
- * Termine une session de temps
+ * Termine une session de temps.
+ * Récupère le lieu depuis les coordonnées GPS enregistrées au démarrage
+ * (reverse geocoding Nominatim).
  */
 export const endTimeSession = async (sessionId: string): Promise<void> => {
   const now = new Date().toISOString();
 
-  // Récupère la session pour calculer la durée
+  // Récupère la session (durée + coordonnées pour le lieu)
   const { data: session } = await supabase
     .from('time_sessions')
-    .select('started_at')
+    .select('started_at, latitude, longitude')
     .eq('id', sessionId)
     .single();
 
@@ -334,12 +343,25 @@ export const endTimeSession = async (sessionId: string): Promise<void> => {
     (new Date(now).getTime() - new Date(session.started_at).getTime()) / 1000
   );
 
+  // Reverse geocoding si les coordonnées sont disponibles
+  let placeData: Record<string, string> = {};
+  if (session.latitude != null && session.longitude != null) {
+    const place = await getPlaceFromCoords(session.latitude, session.longitude);
+    placeData = {
+      place_name:     place.place_name,
+      place_category: place.place_category,
+      place_emoji:    place.place_emoji,
+      city:           place.city,
+    };
+  }
+
   const { error } = await supabase
     .from('time_sessions')
     .update({
-      ended_at: now,
+      ended_at:         now,
       duration_seconds: durationSeconds,
-      is_active: false,
+      is_active:        false,
+      ...placeData,
     })
     .eq('id', sessionId);
 

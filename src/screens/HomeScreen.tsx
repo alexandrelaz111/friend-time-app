@@ -1,54 +1,106 @@
-import React, { useEffect, useState, useCallback } from 'react';
+// src/screens/HomeScreen.tsx
+import React, { useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, RefreshControl, Pressable,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { MapPinOff, Sparkles } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
-import { getFriendTimeStats, getStatsForPeriod } from '../services/friendService';
-import { FriendTimeStats } from '../types';
+import { getFriendTimeStats, getStatsForPeriod, getFriendSessions, computeStreak } from '../services/friendService';
+import { FriendTimeStats, RootStackParamList } from '../types';
+import { THEME, formatHours, formatRelativeDate } from '../theme';
+import { HeroStatCard } from '../components/HeroStatCard';
+import { FriendRow } from '../components/FriendRow';
+import { StatusPill } from '../components/StatusPill';
+
+// Génère des insights fun et personnalisés
+const generateInsights = (stats: FriendTimeStats[], monthlyTotal: { hours: number; friends: number }): string[] => {
+  const insights: string[] = [];
+  if (stats.length === 0) return insights;
+
+  const months = ['janvier','fevrier','mars','avril','mai','juin','juillet','aout','septembre','octobre','novembre','decembre'];
+  const currentMonth = months[new Date().getMonth()];
+
+  // Top ami
+  const top = stats[0];
+  if (top && top.total_hours > 0) {
+    const h = formatHours(top.total_hours);
+    insights.push(`Tu as passe ${h} avec ${top.friend.username} en ${currentMonth} — c'est ton #1 !`);
+  }
+
+  // Lieu prefere du top ami
+  if (top?.last_place_emoji && top?.last_place_name) {
+    insights.push(`${top.last_place_emoji} Dernier spot avec ${top.friend.username} : ${top.last_place_name}${top.last_city ? ` a ${top.last_city}` : ''}`);
+  }
+
+  // Nombre de sessions total
+  const totalSessions = stats.reduce((sum, s) => sum + s.sessions_count, 0);
+  if (totalSessions > 0) {
+    insights.push(`${totalSessions} moment${totalSessions > 1 ? 's' : ''} partage${totalSessions > 1 ? 's' : ''} ce mois — chaque minute compte`);
+  }
+
+  // Comparaison fun du temps
+  if (monthlyTotal.hours >= 1) {
+    const movies = Math.floor(monthlyTotal.hours / 1.5);
+    if (movies >= 1) {
+      insights.push(`${formatHours(monthlyTotal.hours)} ensemble ce mois, soit ${movies} film${movies > 1 ? 's' : ''} au cine`);
+    }
+  }
+
+  // Plusieurs amis vus
+  if (monthlyTotal.friends > 1) {
+    insights.push(`${monthlyTotal.friends} amis vus en ${currentMonth} — tu geres`);
+  }
+
+  // Si vu recemment
+  if (top?.last_seen) {
+    const daysAgo = Math.floor((Date.now() - new Date(top.last_seen).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysAgo === 0) {
+      insights.push(`Tu as vu ${top.friend.username} aujourd'hui — belle journee`);
+    } else if (daysAgo === 1) {
+      insights.push(`Tu as vu ${top.friend.username} hier — a quand la prochaine ?`);
+    }
+  }
+
+  return insights;
+};
 
 export const HomeScreen: React.FC = () => {
   const { user, isLocationEnabled, enableLocation } = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [stats, setStats] = useState<FriendTimeStats[]>([]);
+  const [streaks, setStreaks] = useState<Record<string, number>>({});
   const [monthlyTotal, setMonthlyTotal] = useState({ hours: 0, friends: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadStats = async () => {
     if (!user) return;
-
     try {
-      // Stats par ami
       const friendStats = await getFriendTimeStats(user.id);
       setStats(friendStats);
-
-      // Stats du mois en cours
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
       const periodStats = await getStatsForPeriod(user.id, startOfMonth, endOfMonth);
-      setMonthlyTotal({
-        hours: periodStats.totalHours,
-        friends: periodStats.friendsCount,
-      });
-    } catch (error) {
-      console.error('Erreur chargement stats:', error);
+      setMonthlyTotal({ hours: periodStats.totalHours, friends: periodStats.friendsCount });
+
+      // Charger les streaks pour chaque ami
+      const streakMap: Record<string, number> = {};
+      for (const stat of friendStats) {
+        const sessions = await getFriendSessions(user.id, stat.friend_id);
+        streakMap[stat.friend_id] = computeStreak(sessions);
+      }
+      setStreaks(streakMap);
+    } catch (e) {
+      console.error('Erreur chargement stats:', e);
     } finally {
       setLoading(false);
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadStats();
-    }, [user])
-  );
+  useFocusEffect(useCallback(() => { loadStats(); }, [user]));
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -56,279 +108,239 @@ export const HomeScreen: React.FC = () => {
     setRefreshing(false);
   };
 
-  const formatTime = (hours: number): string => {
-    if (hours < 1) {
-      return `${Math.round(hours * 60)} min`;
-    }
-    return `${hours}h`;
-  };
-
-  const getCurrentMonth = (): string => {
-    const months = [
-      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
-    ];
-    return months[new Date().getMonth()];
+  const getCurrentMonth = () => {
+    const months = ['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
+    return `${months[new Date().getMonth()]} ${new Date().getFullYear()}`;
   };
 
   return (
     <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
+      style={s.container}
+      contentContainerStyle={s.content}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.color.ember} />
       }
     >
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.greeting}>Salut {user?.username} !</Text>
-        <View style={styles.statusBadge}>
-          <View style={[styles.statusDot, isLocationEnabled ? styles.statusActive : styles.statusInactive]} />
-          <Text style={styles.statusText}>
-            {isLocationEnabled ? 'Tracking actif' : 'Tracking inactif'}
-          </Text>
-        </View>
+      <View style={s.header}>
+        <Text style={s.greeting}>
+          Salut <Text style={s.greetingName}>{user?.username}</Text>
+        </Text>
+        <StatusPill tone={isLocationEnabled ? 'on' : 'off'}>
+          {isLocationEnabled ? 'Tracking actif' : 'Tracking inactif'}
+        </StatusPill>
       </View>
 
-      {/* Alerte si localisation désactivée */}
+      {/* Alerte localisation */}
       {!isLocationEnabled && (
-        <TouchableOpacity style={styles.alertCard} onPress={enableLocation}>
-          <Text style={styles.alertTitle}>Localisation désactivée</Text>
-          <Text style={styles.alertText}>
-            Active la localisation pour mesurer le temps passé avec tes amis
-          </Text>
-          <Text style={styles.alertAction}>Activer maintenant</Text>
-        </TouchableOpacity>
+        <Pressable onPress={enableLocation} style={s.alert}>
+          <View style={s.alertIcon}>
+            <MapPinOff size={20} color="#FFFFFF" strokeWidth={1.75} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.alertTitle}>Localisation desactivee</Text>
+            <Text style={s.alertText}>Active-la pour mesurer le temps avec tes amis</Text>
+          </View>
+          <Text style={s.alertCta}>Activer</Text>
+        </Pressable>
       )}
 
-      {/* Carte résumé du mois */}
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>{getCurrentMonth()} 2025</Text>
-        <View style={styles.summaryStats}>
-          <View style={styles.summaryStat}>
-            <Text style={styles.summaryValue}>{formatTime(monthlyTotal.hours)}</Text>
-            <Text style={styles.summaryLabel}>passées ensemble</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryStat}>
-            <Text style={styles.summaryValue}>{monthlyTotal.friends}</Text>
-            <Text style={styles.summaryLabel}>amis vus</Text>
-          </View>
-        </View>
-      </View>
+      {/* Hero stat card */}
+      <HeroStatCard
+        month={getCurrentMonth()}
+        hoursLabel={formatHours(monthlyTotal.hours)}
+        friendsCount={monthlyTotal.friends}
+      />
 
-      {/* Liste des amis avec temps */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Temps par ami</Text>
-
-        {loading ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>Chargement...</Text>
+      {/* Insights fun */}
+      {!loading && stats.length > 0 && (
+        <View style={s.insightsSection}>
+          <View style={s.insightsHeader}>
+            <Sparkles size={14} color={THEME.color.honey} strokeWidth={2} />
+            <Text style={s.insightsTitle}>En bref</Text>
           </View>
-        ) : stats.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Pas encore de données</Text>
-            <Text style={styles.emptyText}>
-              Ajoute des amis et passe du temps avec eux pour voir tes statistiques
-            </Text>
-          </View>
-        ) : (
-          stats.map((stat, index) => (
-            <View key={stat.friend_id} style={styles.friendCard}>
-              <View style={styles.friendRank}>
-                <Text style={styles.friendRankText}>#{index + 1}</Text>
-              </View>
-              <View style={styles.friendInfo}>
-                <Text style={styles.friendName}>{stat.friend.username}</Text>
-                <Text style={styles.friendMeta}>
-                  {stat.sessions_count} session{stat.sessions_count > 1 ? 's' : ''}
-                  {stat.last_seen && ` • Vu le ${new Date(stat.last_seen).toLocaleDateString('fr-FR')}`}
-                </Text>
-              </View>
-              <View style={styles.friendTime}>
-                <Text style={styles.friendTimeValue}>{formatTime(stat.total_hours)}</Text>
-              </View>
+          {generateInsights(stats, monthlyTotal).slice(0, 3).map((text, i) => (
+            <View key={i} style={s.insightRow}>
+              <View style={s.insightDot} />
+              <Text style={s.insightText}>{text}</Text>
             </View>
-          ))
-        )}
+          ))}
+        </View>
+      )}
+
+      {/* Classement */}
+      <View style={s.sectionHeader}>
+        <Text style={s.sectionTitle}>Temps par ami</Text>
+        <Text style={s.sectionEyebrow}>Ce mois</Text>
       </View>
+
+      {loading ? (
+        <View style={s.empty}>
+          <Text style={s.emptyText}>Chargement...</Text>
+        </View>
+      ) : stats.length === 0 ? (
+        <View style={s.empty}>
+          <Text style={s.emptyTitle}>Pas encore de donnees</Text>
+          <Text style={s.emptyText}>
+            Ajoute des amis et passe du temps avec eux pour voir tes statistiques.
+          </Text>
+        </View>
+      ) : (
+        <View style={{ gap: 10 }}>
+          {stats.map((stat, i) => (
+            <FriendRow
+              key={stat.friend_id}
+              rank={i + 1}
+              name={stat.friend.username}
+              avatarUrl={stat.friend.avatar_url}
+              streak={streaks[stat.friend_id]}
+              sessions={stat.sessions_count}
+              lastSeen={formatRelativeDate(stat.last_seen)}
+              time={formatHours(stat.total_hours)}
+              lastPlaceEmoji={stat.last_place_emoji}
+              lastPlaceName={stat.last_place_name}
+              lastCity={stat.last_city}
+              onPress={() => navigation.navigate('FriendDetail', {
+                friendId: stat.friend_id,
+                friendName: stat.friend.username,
+                friendAvatarUrl: stat.friend.avatar_url,
+              })}
+            />
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 32,
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: THEME.color.cream },
+  content: { padding: 20, paddingBottom: 32, gap: 0 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-    marginTop: 8,
-  },
-  greeting: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1e293b',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  statusActive: {
-    backgroundColor: '#22c55e',
-  },
-  statusInactive: {
-    backgroundColor: '#ef4444',
-  },
-  statusText: {
-    color: '#94a3b8',
-    fontSize: 12,
-  },
-  alertCard: {
-    backgroundColor: '#7c2d12',
-    borderRadius: 16,
-    padding: 16,
     marginBottom: 16,
-  },
-  alertTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  alertText: {
-    color: '#fed7aa',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  alertAction: {
-    color: '#fb923c',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  summaryCard: {
-    backgroundColor: '#6366f1',
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 24,
-  },
-  summaryTitle: {
-    color: '#e0e7ff',
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  summaryStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  summaryStat: {
-    alignItems: 'center',
-  },
-  summaryValue: {
-    color: '#fff',
-    fontSize: 36,
-    fontWeight: 'bold',
-  },
-  summaryLabel: {
-    color: '#c7d2fe',
-    fontSize: 12,
     marginTop: 4,
   },
-  summaryDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#818cf8',
+  greeting: {
+    fontFamily: THEME.font.bodyBold,
+    fontSize: 28,
+    color: THEME.color.ink,
+    letterSpacing: -0.5,
   },
-  section: {
-    marginBottom: 24,
+  greetingName: {
+    fontFamily: THEME.font.display,
+    fontWeight: '400',
   },
-  sectionTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+  alert: {
+    backgroundColor: THEME.color.honeySoft,
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
     marginBottom: 16,
   },
-  emptyState: {
-    backgroundColor: '#1e293b',
-    borderRadius: 16,
+  alertIcon: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: THEME.color.honey,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  alertTitle: {
+    fontSize: 14,
+    fontFamily: THEME.font.bodyBold,
+    color: THEME.color.ink,
+  },
+  alertText: {
+    fontSize: 12,
+    fontFamily: THEME.font.body,
+    color: THEME.color.walnut,
+    marginTop: 2,
+  },
+  alertCta: {
+    fontFamily: THEME.font.bodyBold,
+    fontSize: 13,
+    color: THEME.color.honeyDeep,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontFamily: THEME.font.bodyBold,
+    fontSize: 18,
+    color: THEME.color.ink,
+  },
+  sectionEyebrow: {
+    fontSize: 11,
+    fontFamily: THEME.font.bodySemibold,
+    color: THEME.color.fg2,
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  insightsSection: {
+    backgroundColor: THEME.color.linen,
+    borderRadius: 20,
+    padding: 18,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: THEME.color.sandSoft,
+  },
+  insightsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  insightsTitle: {
+    fontFamily: THEME.font.bodySemibold,
+    fontSize: 13,
+    color: THEME.color.honeyDeep,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  insightRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 10,
+  },
+  insightDot: {
+    width: 6, height: 6,
+    borderRadius: 3,
+    backgroundColor: THEME.color.honey,
+    marginTop: 6,
+  },
+  insightText: {
+    flex: 1,
+    fontFamily: THEME.font.body,
+    fontSize: 14,
+    color: THEME.color.ink,
+    lineHeight: 20,
+  },
+  empty: {
+    backgroundColor: THEME.color.paper,
+    borderRadius: 20,
     padding: 32,
     alignItems: 'center',
+    ...THEME.shadow.sm,
   },
   emptyTitle: {
-    color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: THEME.font.bodyBold,
+    color: THEME.color.ink,
     marginBottom: 8,
   },
   emptyText: {
-    color: '#94a3b8',
     fontSize: 14,
+    fontFamily: THEME.font.body,
+    color: THEME.color.fg2,
     textAlign: 'center',
-  },
-  friendCard: {
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  friendRank: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#334155',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  friendRankText: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  friendInfo: {
-    flex: 1,
-  },
-  friendName: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  friendMeta: {
-    color: '#64748b',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  friendTime: {
-    backgroundColor: '#312e81',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  friendTimeValue: {
-    color: '#a5b4fc',
-    fontSize: 16,
-    fontWeight: '700',
+    lineHeight: 20,
   },
 });

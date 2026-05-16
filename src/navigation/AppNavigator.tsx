@@ -1,138 +1,151 @@
+// src/navigation/AppNavigator.tsx
 import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, StyleSheet } from 'react-native';
+import { Clock3, Users, UserRound, MapPin, LucideIcon } from 'lucide-react-native';
 
 import { useAuth } from '../context/AuthContext';
+import { RootStackParamList } from '../types';
+import { THEME } from '../theme';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { MapScreen } from '../screens/MapScreen';
 import { FriendsScreen } from '../screens/FriendsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import { FriendDetailScreen } from '../screens/FriendDetailScreen';
 
 const Stack = createNativeStackNavigator();
+const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator();
 
-// Icônes simples (tu peux utiliser @expo/vector-icons pour de vraies icônes)
-const TabIcon = ({ label, focused }: { label: string; focused: boolean }) => (
-  <View style={styles.tabIcon}>
-    <Text style={[styles.tabIconText, focused && styles.tabIconTextActive]}>
-      {label === 'Accueil' ? '⏱' : label === 'Amis' ? '👥' : '⚙️'}
-    </Text>
+const TabIcon = ({ Icon, focused }: { Icon: LucideIcon; focused: boolean }) => (
+  <View style={[s.tabIcon, focused && s.tabIconActive]}>
+    <Icon
+      size={20}
+      strokeWidth={1.75}
+      color={focused ? THEME.color.ember : THEME.color.fg2}
+    />
   </View>
 );
 
-const MainTabs = () => {
-  return (
-    <Tab.Navigator
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: '#0f172a',
-        },
-        headerTintColor: '#fff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
-        tabBarStyle: {
-          backgroundColor: '#1e293b',
-          borderTopColor: '#334155',
-          paddingBottom: 8,
-          paddingTop: 8,
-          height: 70,
-        },
-        tabBarActiveTintColor: '#6366f1',
-        tabBarInactiveTintColor: '#64748b',
-        tabBarLabelStyle: {
-          fontSize: 12,
-          marginTop: 4,
-        },
-      }}
-    >
-      <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          title: 'Accueil',
-          headerTitle: 'FriendTime',
-          tabBarIcon: ({ focused }) => <TabIcon label="Accueil" focused={focused} />,
-        }}
-      />
-      <Tab.Screen
-        name="Friends"
-        component={FriendsScreen}
-        options={{
-          title: 'Amis',
-          headerTitle: 'Mes amis',
-          tabBarIcon: ({ focused }) => <TabIcon label="Amis" focused={focused} />,
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          title: 'Profil',
-          headerTitle: 'Mon profil',
-          tabBarIcon: ({ focused }) => <TabIcon label="Profil" focused={focused} />,
-        }}
-      />
-    </Tab.Navigator>
-  );
-};
-
-const AuthStack = () => {
-  return (
-    <Stack.Navigator
-      screenOptions={{
+const MainTabs = () => (
+  <Tab.Navigator
+    screenOptions={{
+      headerStyle: { backgroundColor: THEME.color.cream },
+      headerTintColor: THEME.color.ink,
+      headerTitleStyle: { fontFamily: THEME.font.bodyBold, fontSize: 17 },
+      headerShadowVisible: false,
+      tabBarStyle: {
+        backgroundColor: THEME.color.paper,
+        borderTopColor: THEME.color.sandSoft,
+        height: 78,
+        paddingTop: 8,
+        paddingBottom: 20,
+      },
+      tabBarActiveTintColor: THEME.color.ember,
+      tabBarInactiveTintColor: THEME.color.fg2,
+      tabBarLabelStyle: {
+        fontFamily: THEME.font.bodySemibold,
+        fontSize: 11,
+        marginTop: 4,
+      },
+    }}
+  >
+    <Tab.Screen
+      name="Home" component={HomeScreen}
+      options={{
+        title: 'Accueil',
         headerShown: false,
+        tabBarIcon: ({ focused }) => <TabIcon Icon={Clock3} focused={focused} />,
       }}
-    >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
-    </Stack.Navigator>
-  );
-};
+    />
+    <Tab.Screen
+      name="Map" component={MapScreen}
+      options={{
+        title: 'Carte',
+        headerShown: false,
+        tabBarIcon: ({ focused }) => <TabIcon Icon={MapPin} focused={focused} />,
+      }}
+    />
+    <Tab.Screen
+      name="Friends" component={FriendsScreen}
+      options={{
+        title: 'Amis',
+        headerShown: false,
+        tabBarIcon: ({ focused }) => <TabIcon Icon={Users} focused={focused} />,
+      }}
+    />
+    <Tab.Screen
+      name="Profile" component={ProfileScreen}
+      options={{
+        title: 'Profil',
+        headerShown: false,
+        tabBarIcon: ({ focused }) => <TabIcon Icon={UserRound} focused={focused} />,
+      }}
+    />
+  </Tab.Navigator>
+);
+
+const AuthStack = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="Login" component={LoginScreen} />
+    <Stack.Screen name="Register" component={RegisterScreen} />
+  </Stack.Navigator>
+);
 
 export const AppNavigator: React.FC = () => {
   const { user, loading } = useAuth();
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Chargement...</Text>
+      <View style={s.loadingScreen}>
+        <Text style={s.loadingText}>Chargement...</Text>
       </View>
     );
   }
 
   return (
     <NavigationContainer>
-      {user ? <MainTabs /> : <AuthStack />}
+      {user ? (
+        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+          <RootStack.Screen name="MainTabs" component={MainTabs} />
+          <RootStack.Screen
+            name="FriendDetail"
+            component={FriendDetailScreen}
+            options={{
+              headerShown: true,
+              headerTitle: '',
+              headerBackTitle: 'Retour',
+              headerStyle: { backgroundColor: THEME.color.cream },
+              headerTintColor: THEME.color.ember,
+              headerShadowVisible: false,
+            }}
+          />
+        </RootStack.Navigator>
+      ) : (
+        <AuthStack />
+      )}
     </NavigationContainer>
   );
 };
 
-const styles = StyleSheet.create({
-  loadingContainer: {
+const s = StyleSheet.create({
+  tabIcon: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tabIconActive: { backgroundColor: THEME.color.emberSoft },
+  loadingScreen: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
+    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: THEME.color.cream,
   },
   loadingText: {
-    color: '#fff',
+    color: THEME.color.fg2,
     fontSize: 16,
-  },
-  tabIcon: {
-    width: 28,
-    height: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tabIconText: {
-    fontSize: 20,
-    opacity: 0.5,
-  },
-  tabIconTextActive: {
-    opacity: 1,
+    fontFamily: THEME.font.body,
   },
 });

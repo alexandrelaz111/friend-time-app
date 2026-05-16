@@ -1,23 +1,17 @@
+// src/screens/RegisterScreen.tsx
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
+  View, Text, KeyboardAvoidingView, Platform, ScrollView, Alert, Pressable, StyleSheet,
 } from 'react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
+import { THEME } from '../theme';
+import { Input } from '../components/Input';
+import { Button } from '../components/Button';
 
-interface RegisterScreenProps {
-  navigation: any;
-}
+interface Props { navigation: any; }
 
-export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
+export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -26,192 +20,118 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
   const { signUp } = useAuth();
 
   const handleRegister = async () => {
-    // Validations
     if (!email.trim() || !username.trim() || !password.trim()) {
       Alert.alert('Erreur', 'Veuillez remplir tous les champs');
       return;
     }
-
     if (username.length < 3) {
-      Alert.alert('Erreur', 'Le nom d\'utilisateur doit faire au moins 3 caractères');
+      Alert.alert('Erreur', "Le nom d'utilisateur doit faire au moins 3 caracteres");
       return;
     }
-
     if (password.length < 6) {
-      Alert.alert('Erreur', 'Le mot de passe doit faire au moins 6 caractères');
+      Alert.alert('Erreur', 'Le mot de passe doit faire au moins 6 caracteres');
       return;
     }
-
     if (password !== confirmPassword) {
       Alert.alert('Erreur', 'Les mots de passe ne correspondent pas');
       return;
     }
-
     setLoading(true);
     const { error } = await signUp(email.trim(), password, username.trim());
     setLoading(false);
-
     if (error) {
-      Alert.alert('Erreur d\'inscription', error);
+      Alert.alert("Erreur d'inscription", error);
     } else {
-      Alert.alert(
-        'Compte créé !',
-        'Vérifie tes emails pour confirmer ton compte.',
-        [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
-      );
+      Alert.alert('Compte cree !', 'Verifie tes emails pour confirmer ton compte.', [
+        { text: 'OK', onPress: () => navigation.navigate('Login') },
+      ]);
     }
   };
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={s.container}
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Créer un compte</Text>
-            <Text style={styles.subtitle}>
-              Rejoins FriendTime et découvre combien de temps tu passes avec tes amis
-            </Text>
-          </View>
+      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+        <Pressable onPress={() => navigation.navigate('Login')} style={s.back}>
+          <ArrowLeft size={16} color={THEME.color.fg2} strokeWidth={1.75} />
+          <Text style={s.backText}>Retour</Text>
+        </Pressable>
 
-          <View style={styles.form}>
-            <TextInput
-              style={styles.input}
-              placeholder="Nom d'utilisateur"
-              placeholderTextColor="#9ca3af"
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+        <Text style={s.title}>Cree ton compte</Text>
+        <Text style={s.subtitle}>
+          Trois infos, et tu peux commencer a mesurer le temps avec tes amis.
+        </Text>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor="#9ca3af"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Mot de passe"
-              placeholderTextColor="#9ca3af"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Confirmer le mot de passe"
-              placeholderTextColor="#9ca3af"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-            />
-
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleRegister}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>S'inscrire</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.linkButton}
-              onPress={() => navigation.navigate('Login')}
-            >
-              <Text style={styles.linkText}>
-                Déjà un compte ? <Text style={styles.linkTextBold}>Se connecter</Text>
-              </Text>
-            </TouchableOpacity>
-          </View>
+        <View style={s.form}>
+          <Input
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Input
+            placeholder="Nom d'utilisateur"
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Input
+            placeholder="Mot de passe"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+          <Input
+            placeholder="Confirme le mot de passe"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+          />
+          <Button variant="primary" size="lg" onPress={handleRegister} loading={loading} fullWidth>
+            Creer mon compte
+          </Button>
+          <Text style={s.fineprint}>
+            En t'inscrivant, tu acceptes que ta proximite avec tes amis soit mesuree.{'\n'}
+            Ta position exacte n'est jamais partagee.
+          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: THEME.color.cream },
+  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  back: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 24 },
+  backText: { fontSize: 14, fontFamily: THEME.font.bodySemibold, color: THEME.color.fg2 },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontFamily: THEME.font.display,
+    fontSize: 44,
+    lineHeight: 46,
+    color: THEME.color.ink,
+    letterSpacing: -0.8,
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#94a3b8',
+    fontSize: 15,
+    fontFamily: THEME.font.body,
+    color: THEME.color.fg2,
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  form: { gap: 12 },
+  fineprint: {
+    marginTop: 6,
+    fontSize: 12,
+    fontFamily: THEME.font.body,
+    color: THEME.color.fg3,
     textAlign: 'center',
-    lineHeight: 20,
-  },
-  form: {
-    gap: 16,
-  },
-  input: {
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#fff',
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  button: {
-    backgroundColor: '#6366f1',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  linkButton: {
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  linkText: {
-    color: '#94a3b8',
-    fontSize: 14,
-  },
-  linkTextBold: {
-    color: '#6366f1',
-    fontWeight: '600',
+    lineHeight: 18,
   },
 });
